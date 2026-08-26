@@ -1,0 +1,44 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# model weights (binary files excluded, folder preserved via .gitkeep)
+weights/*
+!weights/.gitkeep
+
+
+# run outputs & databases
+output/
+runs/
+*.sqlite
+*.sqlite3
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# generic cache
+.cache/
+
+# -----------------------------------------------------------------------------
+# Offline demo fixtures & caches (baked into Docker image socialgood/trash-agent-demo)
+# Comment/uncomment these lines if you need to track or commit local fixture updates
+# -----------------------------------------------------------------------------
+fixtures/cache/
+fixtures/llm/
+fixtures/masks/
+fixtures/images/
+record_demo.py
+
+# development and maintenance scripts
+scripts/
+
+
+

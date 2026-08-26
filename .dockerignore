@@ -1,0 +1,18 @@
+.git/
+.vscode/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# mounted as volumes at runtime, not baked into the image
+runs/
+weights/
+
+.env
+*.sqlite
+*.sqlite3
+
+.DS_Store
+.idea/

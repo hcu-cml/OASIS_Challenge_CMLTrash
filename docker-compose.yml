@@ -1,0 +1,70 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    # No host port published: the `app` container reaches this one over the
+    # internal compose network at http://ollama:11434, so nothing here needs
+    # to bind a host port - which also avoids clashing with a native Ollama
+    # install already using 11434 on the host. Uncomment to expose it anyway
+    # for `ollama pull`/`ollama run` debugging from the host:
+    # ports:
+    #   - "11435:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    # gemma4:31b (~20B-class weights) is not viable on CPU - this reservation
+    # is required, not optional. Needs the NVIDIA driver + nvidia-container-
+    # toolkit on the host (already present here: `nvidia-smi` + `nvidia-ctk`).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  app:
+    build: .
+    depends_on:
+      - ollama
+    ports:
+      # Host:container. Mapped to 5050 on the host in case 5000 is already
+      # taken by a native (non-Docker) run of this same app. Change the left
+      # side if 5050 is also taken; the app always listens on 5000 inside
+      # the container.
+      - "5050:5000"
+    # SAM3 (app/perception.py) loads torch and runs on CUDA when available.
+    # It falls back to CPU otherwise, but a ViT-scale segmentation model over
+    # every candidate image, on CPU, is not a realistic option - this
+    # reservation is required for tiers 1/2 (segment_trash, segment_humans).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      LLM_PROFILE: ollama
+      # Points at the `ollama` service by its compose network name, not
+      # localhost - the two are separate containers.
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL_TAG: gemma4:31b
+      MODEL_VISION: gemma4:31b
+      MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      SAM3_DIR: /app/weights/sam3
+      RUNS_DIR: /app/runs
+    volumes:
+      - ./runs:/app/runs
+      - ./weights:/app/weights
+      - ./fixtures:/app/fixtures
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

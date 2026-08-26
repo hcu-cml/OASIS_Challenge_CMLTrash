@@ -1,0 +1,525 @@
+{
+  "aoi": {
+    "bbox": [
+      90.348413,
+      23.7119838,
+      90.388413,
+      23.7519838
+    ],
+    "epsg": 32646,
+    "query": "Hazaribagh, Dhaka",
+    "resolved": "Hazaribagh, Dhaka, Dhaka Metropolitan, Dhaka District, Dhaka Division, 1205, Bangladesh",
+    "source": "nominatim"
+  },
+  "artifacts": [
+    "brief.md",
+    "manifest.json",
+    "trash_citygml.gml"
+  ],
+  "blur_humans": {
+    "blur_radius": 28.0,
+    "copied": 0,
+    "dilation_px": 25,
+    "method": "sam3_only",
+    "person_prompts": [
+      "person walking",
+      "person standing",
+      "human body",
+      "pedestrian",
+      "person on bicycle"
+    ],
+    "published_observations": 4,
+    "redacted": 1,
+    "sanitized": 1
+  },
+  "coverage_audit": {
+    "blind_spot_fraction": 0.25,
+    "cells_with_imagery": 1,
+    "median_basis": "cells_with_imagery",
+    "n_cells": 16,
+    "n_images": 16,
+    "scope": "imagery_availability_only"
+  },
+  "export_citygml": {
+    "bytes": 13079,
+    "crs": "urn:ogc:def:crs:EPSG::4326",
+    "exported_review_status": "approved",
+    "feature_type": "gen:GenericCityObject",
+    "features": 4,
+    "filename": "trash_citygml.gml",
+    "gate": "post_human_review",
+    "position_is_surveyed_waste_location": false,
+    "position_source": "camera_gps_observation_point",
+    "skipped_without_coordinate": 0,
+    "url": "/artifact/94c7703b81/trash_citygml.gml",
+    "version": "2.0"
+  },
+  "fetch": {
+    "fetched": 16,
+    "requested": 16
+  },
+  "llm": {
+    "base_url": "http://localhost:11434/v1",
+    "profile": "ollama",
+    "roles": {
+      "vision": {
+        "model": "gemma4:31b",
+        "sampling": {}
+      }
+    },
+    "transport": {
+      "max_retries": 2,
+      "schema_retries": 2,
+      "structured_max_tokens": 8192,
+      "timeout_seconds": 120.0,
+      "truncation_retry_multiplier": 4
+    }
+  },
+  "review_trash": {
+    "accepted_observations": 4,
+    "decided": 1,
+    "queued": 1,
+    "unresolved_rejected": 0
+  },
+  "reviews": {
+    "trash": [
+      {
+        "decision": "approve",
+        "image_id": "324331275698856",
+        "note": "verified in end-to-end test"
+      }
+    ]
+  },
+  "screen_trash": {
+    "concurrency": 4,
+    "criterion": "excessive_roadside_trash_not_scattered_litter",
+    "image_max_side_px": 896,
+    "images_attempted": 16,
+    "max_tokens": 1200,
+    "model": "gemma4:31b",
+    "model_errors": 0,
+    "sampling": {},
+    "source": "original_fetched_images"
+  },
+  "screening_evidence": {
+    "trash": [
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were detected in the image. The street and roadside areas are clear of waste accumulations.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "3572840919712318",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were identified. Only light, scattered litter is visible, which is excluded from the count.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "1546809548858665",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were identified in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "1016554298875960",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were detected in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "1704642966403134",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were found in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "1181493849031578",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were identified in the provided image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "2567295620232176",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles or accumulations of roadside trash were identified. Only scattered light litter is present.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "311064743717311",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial piles of roadside trash were identified in the image. The observed items are predominantly merchandise for sale or typical urban street activity.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "251345770064604",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of trash are visible along the road edges or footpaths in this scene.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "465779584746258",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles or accumulations of roadside trash were observed in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "462961318319233",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were observed in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "805645693408084",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles of roadside trash were detected in the provided imagery.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "505256987311432",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": false,
+        "assessment": {
+          "candidates": [
+            {
+              "confidence": 0.95,
+              "location": "against the brick wall on the right side of the alley",
+              "prompt_variants": [
+                "large white sacks of trash",
+                "pile of white waste bags",
+                "white sacks leaning against wall"
+              ],
+              "waste_type": "mixed"
+            },
+            {
+              "confidence": 0.9,
+              "location": "on the right side of the alley, adjacent to the white sacks",
+              "prompt_variants": [
+                "pile of brown cardboard waste",
+                "brown debris on roadside",
+                "accumulation of brown trash"
+              ],
+              "waste_type": "mixed"
+            }
+          ],
+          "excessive_roadside_trash": true,
+          "pile_count": 2,
+          "report": "There are two distinct piles of waste on the right side of the alleyway leaning against a wall: one consisting of large white sacks and another of brown cardboard and mixed materials.",
+          "uncertainty": false
+        },
+        "decision": "approve",
+        "disagreement": true,
+        "image_id": "324331275698856",
+        "model_error": null,
+        "notes": [
+          "Gemma described 2 trash piles but SAM3 segmented 4 trash piles"
+        ],
+        "prompts": [
+          "large white sacks of trash",
+          "pile of white waste bags",
+          "white sacks leaning against wall",
+          "pile of brown cardboard waste",
+          "brown debris on roadside",
+          "accumulation of brown trash"
+        ],
+        "reason": "Gemma described 2 trash piles but SAM3 segmented 4 trash piles",
+        "sam_count": 4,
+        "sam_error": null,
+        "vision_pile_count": 2
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial piles of roadside trash were identified in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "133566255929119",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial roadside trash piles were found in the image. The walkway appears relatively clear of large accumulations of waste.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "270430791412664",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      },
+      {
+        "agreed_no_trash": true,
+        "assessment": {
+          "candidates": [],
+          "excessive_roadside_trash": false,
+          "pile_count": 0,
+          "report": "No substantial uncontained piles or accumulations of roadside trash were identified in the image.",
+          "uncertainty": false
+        },
+        "decision": null,
+        "disagreement": false,
+        "image_id": "1221296794976554",
+        "model_error": null,
+        "notes": [],
+        "prompts": [],
+        "reason": "",
+        "sam_count": 0,
+        "sam_error": null,
+        "vision_pile_count": 0
+      }
+    ]
+  },
+  "segment_trash": {
+    "agreed_no_trash_images": 15,
+    "all_gemma_prompts_run": true,
+    "candidate_images": 1,
+    "category": "excessive_roadside_trash",
+    "disagreements": 1,
+    "gemma_positive_images": 1,
+    "images_without_model_prompts": 15,
+    "model_errors": 0,
+    "namespace": "trash",
+    "noted_without_review": 0,
+    "pre_redaction_detection_artifacts_emitted": false,
+    "prompt_fallback_ensemble": null,
+    "prompt_sets": {
+      "1016554298875960": [],
+      "1181493849031578": [],
+      "1221296794976554": [],
+      "133566255929119": [],
+      "1546809548858665": [],
+      "1704642966403134": [],
+      "251345770064604": [],
+      "2567295620232176": [],
+      "270430791412664": [],
+      "311064743717311": [],
+      "324331275698856": [
+        "large white sacks of trash",
+        "pile of white waste bags",
+        "white sacks leaning against wall",
+        "pile of brown cardboard waste",
+        "brown debris on roadside",
+        "accumulation of brown trash"
+      ],
+      "3572840919712318": [],
+      "462961318319233": [],
+      "465779584746258": [],
+      "505256987311432": [],
+      "805645693408084": []
+    },
+    "prompt_source": "vision_model_assessment",
+    "raw_overlays_created": false,
+    "sam_masks": 4,
+    "sam_positive_images": 1,
+    "screened_images": 16,
+    "vision_model": "Gemma"
+  },
+  "summary": {
+    "accepted_observations": 4,
+    "citygml_features": 4,
+    "privacy": {
+      "candidate_images": 1,
+      "copied_no_humans": 0,
+      "human_masks": 1,
+      "redacted": 1,
+      "sam3_person_prompts": [
+        "person walking",
+        "person standing",
+        "human body",
+        "pedestrian",
+        "person on bicycle"
+      ],
+      "sanitized": 1
+    },
+    "sanitized_candidate_images": 1,
+    "source_images": 16,
+    "trash_candidate_images": 1,
+    "trash_screened_original_images": 16
+  }
+}
