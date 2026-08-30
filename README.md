@@ -2,7 +2,7 @@
 
 An autonomous, privacy-first GeoAI agent that detects, segments, and maps roadside waste accumulations from street-level imagery. 
 
-Built for the **ACM SIGSPATIAL OASIS 2026 Student Challenge**, the agent pairs Vision-Language Models (**Gemma 4**) with instance segmentation (**SAM3**) in a verified human-in-the-loop workflow.
+The agent pairs Vision-Language Models (**Gemma 4**) with instance segmentation (**SAM3**) in a verified human-in-the-loop workflow.
 
 ---
 
@@ -187,6 +187,5 @@ HF_TOKEN=
 
 ## License & Acknowledgements
 
-- Built for the **ACM SIGSPATIAL OASIS 2026 Student Challenge**.
 - Street-level imagery provided by **[Mapillary](https://www.mapillary.com/)**.
 - Multimodal perception powered by **Google Gemma 4** and Meta AI's **SAM3**.
