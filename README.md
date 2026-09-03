@@ -1,4 +1,6 @@
 # Roadside Trash Agent
+<img width="1920" height="1080" alt="Screenshot (223)" src="https://github.com/user-attachments/assets/fc73842d-b169-4862-9a50-72984933da14" />
+
 
 An autonomous, privacy-first GeoAI agent that detects, segments, and maps roadside waste accumulations from street-level imagery. 
 
