@@ -51,9 +51,10 @@ services:
               capabilities: [gpu]
     environment:
       LLM_PROFILE: ollama
-      # Points at the `ollama` service by its compose network name, not
-      # localhost - the two are separate containers.
-      OLLAMA_BASE_URL: http://ollama:11434/v1
+      # Defaults to the compose-internal `ollama` service. Override in .env
+      # with http://host.docker.internal:11434/v1 when running only the app
+      # container against a native Ollama install on the host.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434/v1}
       OLLAMA_MODEL_TAG: gemma4:31b
       MODEL_VISION: gemma4:31b
       MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}

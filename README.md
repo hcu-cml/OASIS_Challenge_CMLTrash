@@ -127,6 +127,53 @@ In live mode, the agent fetches real-time Mapillary imagery for any city or draw
 
 ---
 
+### 5. Alternative: Run with Docker (Live Mode)
+
+If you prefer to run the application in a Docker container while still using live Ollama inference, follow the steps below. **Ollama and the Gemma 4 model must be installed on the host machine first** — pulling a ~20 GB model inside a container is impractically slow.
+
+#### Prerequisites
+
+- **NVIDIA GPU** with up-to-date drivers
+- **Docker** (with Compose v2) and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed
+- **Ollama installed on the host** with `gemma4` already pulled (see [Section 2](#2-setting-up-ollama--gemma-4) above)
+- **Mapillary Token** and **HuggingFace Token** in your `.env` file (see [Section 3](#3-installation--setup))
+
+#### Steps
+
+1. **Verify Ollama is running on the host with gemma4 ready:**
+   ```bash
+   ollama list          # should show gemma4
+   ollama serve         # if not already running as a system service
+   ```
+
+2. **Set your tokens in `.env`:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and fill in MAPILLARY_TOKEN and HF_TOKEN
+   ```
+
+3. **Build and start the app container:**
+   ```bash
+   docker compose up --build -d app
+   ```
+   > This starts **only** the `app` service (not the `ollama` service from the compose file). The app container connects to your host's Ollama instance.
+
+4. **Open the dashboard** at **http://localhost:5050**.
+
+5. **Follow logs:**
+   ```bash
+   docker compose logs -f app
+   ```
+
+6. **Stop the container:**
+   ```bash
+   docker compose down
+   ```
+
+> **Note:** By default, the app container reaches the host's Ollama via the Docker internal network. If you encounter connection issues, ensure Ollama is listening on all interfaces (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`) and set `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1` in your `.env` file.
+
+---
+
 ## Configuration (`.env`)
 
 Copy `.env.example` to `.env` and fill in your values:
