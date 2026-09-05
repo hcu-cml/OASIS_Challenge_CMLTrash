@@ -1,12 +1,8 @@
 #!/usr/bin/env sh
 # Entrypoint for the `app` service.
 #
-# Ollama and the gemma4 model are runtime dependencies but live in the
-# separate `ollama` container (see docker-compose.yml), not in this image.
-# Before running anything, wait for that server to accept connections and
-# make sure the model this app hardcodes (ROLE_CHAINS in app/agent/llm.py)
-# is actually pulled - otherwise the first run fails deep inside a request
-# with "no model for role 'vision'" instead of a clear startup message.
+# Waits for the Ollama server and ensures the vision model is pulled, so a
+# missing model fails at startup rather than mid-request.
 set -eu
 
 OLLAMA_HOST_URL="${OLLAMA_BASE_URL:-http://ollama:11434/v1}"

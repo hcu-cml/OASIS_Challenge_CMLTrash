@@ -42,7 +42,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     check("fixtures: cached masks (RLE)", n_masks > 0, f"{n_masks} files in {MASK_CACHE}")
 
     # tier 1/2 — live models
-    profile = os.environ.get("LLM_PROFILE", "saia")
+    profile = os.environ.get("LLM_PROFILE", "ollama")
     try:
         from .agent.llm import Provider
 
@@ -80,7 +80,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     can_replay = n_cache > 0 and n_masks > 0
     print(f"\n  REPLAY={os.environ.get('REPLAY', '0')}   replay-capable: {can_replay}")
     if not can_replay:
-        print("  Record fixtures first:  python -m app.main record \"Altona, Hamburg\"")
+        print("  Record fixtures first:  python -m app.main record \"Kaliganj, Gazipur\"")
     print()
     return 0
 

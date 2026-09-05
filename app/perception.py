@@ -194,7 +194,7 @@ class Segmenter:
                         )
                         continue
                     import cv2
-                    # 15x15 kernel represents a ~7 pixel radius for "very close" masks
+                    # ~7px radius, treating near-touching masks as one instance.
                     kernel = np.ones((15, 15), np.uint8)
                     dilated = cv2.dilate(binary, kernel, iterations=1)
                     
@@ -214,7 +214,7 @@ class Segmenter:
                             target_instance.prompt += f", {prompt}"
                             prompts_set.add(prompt)
                             
-                        # Merge other overlapping instances into the first one as well
+                        # Fold any remaining overlaps into the same instance.
                         for idx in reversed(overlap_indices[1:]):
                             other = instances.pop(idx)
                             target_instance.mask = np.logical_or(target_instance.mask, other.mask).astype(np.uint8)

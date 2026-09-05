@@ -1187,9 +1187,9 @@
       filter: invert(84%)
     }
 
-    .maplibregl-ctrl-attrib-inner {
-      display: none !important
-    }
+    /* Do not override .maplibregl-ctrl-attrib-inner display here: maplibre
+       toggles it via .maplibregl-compact-show when the "i" button is clicked,
+       and a `display: none` override silently breaks the attribution panel. */
 
     .maplibregl-popup {
       max-width: none !important
@@ -1768,7 +1768,9 @@
       const features = Number(d.features) || 0; box.className = "";
       const skipped = Number(d.skipped_without_coordinate) || 0;
       box.innerHTML = `<table class="table"><tr><td>Approved features</td><td class="num">${features}</td></tr><tr><td>CityGML version</td><td class="num">${esc(d.version || "2.0")}</td></tr><tr><td>Feature type</td><td class="num">${esc(d.feature_type || "gen:GenericCityObject")}</td></tr><tr><td>File size</td><td class="num">${esc(fmtBytes(d.bytes))}</td></tr>${skipped ? `<tr><td>Skipped, no coordinate</td><td class="num">${skipped}</td></tr>` : ""}</table>`
+        + `<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">`
         + `<a class="dl" href="${esc(d.url)}" download="${esc(d.filename || "trash_citygml.gml")}">Download CityGML${features ? "" : " (empty)"}</a>`
+        + `</div>`
         + `<p class="hint" style="margin:10px 0 0">Each feature is placed at the camera GPS position it was observed from.</p>`
         + (features ? "" : `<p class="hint" style="margin:6px 0 0">No detection was approved, so the document contains no features.</p>`)
     }

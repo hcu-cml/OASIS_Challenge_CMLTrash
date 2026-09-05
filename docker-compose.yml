@@ -3,11 +3,9 @@ services:
     image: ollama/ollama:latest
     volumes:
       - ollama-models:/root/.ollama
-    # No host port published: the `app` container reaches this one over the
-    # internal compose network at http://ollama:11434, so nothing here needs
-    # to bind a host port - which also avoids clashing with a native Ollama
-    # install already using 11434 on the host. Uncomment to expose it anyway
-    # for `ollama pull`/`ollama run` debugging from the host:
+    # No host port published: `app` reaches this service at http://ollama:11434
+    # over the internal network, avoiding a clash with a native Ollama install.
+    # Uncomment to expose it for debugging from the host.
     # ports:
     #   - "11435:11434"
     healthcheck:
@@ -17,9 +15,8 @@ services:
       retries: 10
       start_period: 20s
     restart: unless-stopped
-    # gemma4:31b (~20B-class weights) is not viable on CPU - this reservation
-    # is required, not optional. Needs the NVIDIA driver + nvidia-container-
-    # toolkit on the host (already present here: `nvidia-smi` + `nvidia-ctk`).
+    # gemma4:31b is not viable on CPU, so the GPU reservation is required.
+    # Needs the NVIDIA driver and nvidia-container-toolkit on the host.
     deploy:
       resources:
         reservations:
@@ -32,16 +29,16 @@ services:
     build: .
     depends_on:
       - ollama
+    # Linux does not resolve host.docker.internal by default. Required when
+    # OLLAMA_BASE_URL points at a native Ollama on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      # Host:container. Mapped to 5050 on the host in case 5000 is already
-      # taken by a native (non-Docker) run of this same app. Change the left
-      # side if 5050 is also taken; the app always listens on 5000 inside
-      # the container.
+      # Published on 5050 in case 5000 is taken by a native run of this app.
+      # The container always listens on 5000.
       - "5050:5000"
-    # SAM3 (app/perception.py) loads torch and runs on CUDA when available.
-    # It falls back to CPU otherwise, but a ViT-scale segmentation model over
-    # every candidate image, on CPU, is not a realistic option - this
-    # reservation is required for tiers 1/2 (segment_trash, segment_humans).
+    # SAM3 runs on CUDA when available and falls back to CPU, which is too slow
+    # for a full survey. The GPU reservation is required for live runs.
     deploy:
       resources:
         reservations:
@@ -51,9 +48,8 @@ services:
               capabilities: [gpu]
     environment:
       LLM_PROFILE: ollama
-      # Defaults to the compose-internal `ollama` service. Override in .env
-      # with http://host.docker.internal:11434/v1 when running only the app
-      # container against a native Ollama install on the host.
+      # Defaults to the internal `ollama` service. Override with
+      # http://host.docker.internal:11434/v1 to use a native Ollama on the host.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434/v1}
       OLLAMA_MODEL_TAG: gemma4:31b
       MODEL_VISION: gemma4:31b

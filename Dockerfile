@@ -1,12 +1,8 @@
 # Roadside Trash Agent - app container.
-#
-# Ollama itself is NOT installed here - it's a separate server process, run as
-# its own container (see docker-compose.yml, service `ollama`). This image only
-# needs an HTTP client to reach it, which `requests`/`openai` already provide.
+# Ollama runs as a separate service (see docker-compose.yml).
 FROM python:3.13-slim
 
-# curl: used by docker/app-entrypoint.sh to wait for Ollama and trigger the
-# gemma4 pull; nothing in the Python app itself shells out to it.
+# curl is used by the entrypoint to poll Ollama and trigger the model pull.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*

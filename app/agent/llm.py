@@ -29,7 +29,8 @@ LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "2"))
 LLM_SCHEMA_RETRIES = int(os.environ.get("LLM_SCHEMA_RETRIES", "2"))
 
 ROLE_CHAINS: dict[str, list[str]] = {
-    "vision": ["gemma-4"],
+    # Substring-matched against served tags, so keep the published tag form.
+    "vision": ["gemma4", "gemma3"],
 }
 
 SAMPLING: list[tuple[str, dict[str, float]]] = []

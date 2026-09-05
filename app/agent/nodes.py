@@ -93,7 +93,6 @@ class Nodes:
                 images = sources.parse_images(sources.mapillary_search(
                     bbox, self.cfg.get("mapillary_token", ""), limit=self.cfg["max_images"]
                 ))
-            # Simple grid-based coverage (no Overpass needed)
             polygons = _grid_polygons(bbox)
             cells: list[CoverageCell] = []
             for unit_id, name, polygon in polygons:
@@ -107,7 +106,7 @@ class Nodes:
                     n_images=n_images, images_per_km2=round(n_images / area_km2, 2),
                     imagery_available=n_images > 0,
                 ))
-            # Calculate coverage density across populated grid cells
+            # Blind spots are cells falling well below the median density.
             covered = [cell for cell in cells if cell.n_images > 0]
             densities = [cell.images_per_km2 for cell in covered]
             median = float(np.median(densities)) if densities else 0.0
@@ -182,7 +181,6 @@ class Nodes:
             sanitized_dir.mkdir(parents=True, exist_ok=True)
             overlay_dir.mkdir(parents=True, exist_ok=True)
 
-            # Standard SAM3 prompts for detecting people in street imagery
             person_prompts = [
                 "person walking", "person standing", "human body",
                 "pedestrian", "person on bicycle",
@@ -202,7 +200,6 @@ class Nodes:
                 if not image or not image.get("local_path"):
                     continue
 
-                # Run SAM3 for people on this candidate
                 human_masks: list[np.ndarray] = []
                 try:
                     with r.tool("sam3.segment", f"{image_id} · person detection"):
@@ -235,7 +232,7 @@ class Nodes:
                     shutil.copyfile(image["local_path"], out)
                     copied += 1
 
-                # Build sanitized record
+                # Point the record at the sanitized copy, never the original.
                 clean = {
                     key: value for key, value in image.items()
                     if key not in ("local_path", "thumb_url")
@@ -246,7 +243,6 @@ class Nodes:
                 })
                 sanitized.append(clean)
 
-                # Generate trash overlay on sanitized base
                 image_observations = [
                     item for item in observations if item.image_id == image_id
                 ]
@@ -275,7 +271,7 @@ class Nodes:
 
                 r.screen_progress(image_id, completed, total)
 
-            # All observations from candidate images are publishable
+            # Only observations backed by a file under sanitized/ may publish.
             sanitized_root = sanitized_dir.resolve()
             publishable: list[Observation] = []
             for item in observations:
@@ -290,7 +286,7 @@ class Nodes:
                     publishable.append(item)
             observations = publishable
 
-            # Remove local_path from trash_rows going forward
+            # Drop unredacted paths so they cannot leak downstream.
             for trash_row in trash_rows.values():
                 trash_row.pop("image_path", None)
 
@@ -475,8 +471,7 @@ class Nodes:
                 expected = int(assessment.get("pile_count", 0)) if assessment else 0
                 found = len(instances)
                 gemma_positive = bool(assessment and assessment["excessive_roadside_trash"])
-                # Reviewer-facing prose. These strings are read by a person in the
-                # review modal, so they name the models and say what happened.
+                # Reviewer-facing prose, shown verbatim in the review modal.
                 reasons: list[str] = []
                 if row.get("model_error"):
                     reasons.append(f"{vision_name} failed to assess this image")
@@ -550,10 +545,9 @@ class Nodes:
                 "gemma_positive_images": sum(bool(row.get("assessment") and row["assessment"]["excessive_roadside_trash"]) for row in rows),
                 "sam_positive_images": sum(bool(row["sam_count"]) for row in rows),
                 "sam_masks": len(observations), "disagreements": len(queue),
-                # Both models agreed there was no trash here, so no human was asked.
+                # Both models agreed on no trash, so no review was opened.
                 "agreed_no_trash_images": agreed_empty_images,
-                # Something was noticed but there was no mask to decide on, so it was
-                # recorded instead of queued.
+                # Noted by the vision model but with no mask to decide on.
                 "noted_without_review": noted_without_review,
                 "model_errors": sum(bool(row.get("model_error") or row.get("sam_error")) for row in rows),
             }
@@ -578,10 +572,8 @@ class Nodes:
                     **stats, "namespace": "trash", "category": "excessive_roadside_trash",
                     "all_gemma_prompts_run": True, "raw_overlays_created": False,
                     "pre_redaction_detection_artifacts_emitted": False,
-                    # Auditable prompt provenance. Every prompt SAM3 received is
-                    # listed per image, and none of them come from a static list:
-                    # perception.Segmenter has no fallback ensemble and raises on
-                    # an empty prompt list.
+                    # Prompt provenance: every SAM3 prompt is model-generated,
+                    # recorded per image, with no static fallback ensemble.
                     "prompt_source": "vision_model_assessment",
                     "prompt_fallback_ensemble": None,
                     "vision_model": vision_name,

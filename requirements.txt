@@ -6,7 +6,6 @@ pydantic==2.12.5
 python-dotenv==1.2.2
 huggingface-hub>=0.28.0
 
-
 # Geospatial & Data Analysis
 shapely==2.1.2
 pyproj==3.7.2
@@ -20,3 +19,12 @@ waitress==3.0.2
 requests==2.33.1
 pillow==12.2.0
 
+# Perception: SAM3 segmentation & privacy redaction.
+# Linux x86_64 wheels on PyPI are CUDA 12.8 builds. On CPU-only or non-CUDA
+# hosts, install the matching build from https://pytorch.org/get-started/locally/
+torch==2.9.0
+torchvision==0.24.0
+# Sam3Model/Sam3Processor require transformers 5.x.
+transformers==5.11.0
+# Headless wheel: only cv2.dilate is used, no GUI backend needed.
+opencv-python-headless==4.10.0.84

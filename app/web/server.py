@@ -75,7 +75,7 @@ def start_run():
     try:
         run = Run(place, overrides)
     except Exception as exc:
-        # Most commonly a missing key or an unreachable endpoint. Say which.
+        # Usually a missing key or an unreachable endpoint.
         return jsonify({"error": str(exc)}), 502
 
     run.start()
@@ -99,7 +99,7 @@ def get_config():
         "OLLAMA_BASE_URL": _os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
         "SAM3_DIR": _os.environ.get("SAM3_DIR", "weights/sam3"),
     }
-    # Mask secrets: return whether they are set but never the full value
+    # Report whether secrets are set, never their value.
     masked = {}
     secret_keys = {"MAPILLARY_TOKEN", "HF_TOKEN"}
     for key, value in keys.items():
@@ -141,13 +141,12 @@ def set_config():
 
 @app.get("/api/events/<run_id>")
 def events(run_id: str):
-    # Check the run registry before BUS.sse; sse() allocates a channel for known
-    # runs, so this ordering guarantees unknown IDs return 404 without mutation.
+    # Check the registry first: BUS.sse() allocates a channel, so this ordering
+    # keeps unknown IDs a clean 404.
     if Run.get(run_id) is None:
         return jsonify({"error": "unknown run"}), 404
-    # On an automatic reconnect the browser cannot change the URL, so it sends
-    # the cursor back in Last-Event-ID instead. Honour that before ?from=, or a
-    # reconnect replays the whole run and reopens any pending human gate.
+    # Last-Event-ID takes precedence over ?from=, otherwise an automatic
+    # reconnect replays the run and reopens any pending human gate.
     resume_at = request.headers.get("Last-Event-ID")
     if resume_at and resume_at.isdigit():
         from_index = int(resume_at)
@@ -158,12 +157,10 @@ def events(run_id: str):
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
-            # Tells nginx-style proxies not to buffer the stream.
+            # Stops nginx-style proxies from buffering the stream.
             "X-Accel-Buffering": "no",
-            # No `Connection` header here. It is hop-by-hop and PEP 3333
-            # forbids a WSGI application from setting it: the Flask dev server
-            # ignored that, waitress raises AssertionError and the whole SSE
-            # endpoint 500s, so the UI receives no events at all.
+            # No `Connection` header: it is hop-by-hop and PEP 3333 forbids a
+            # WSGI app from setting it. Waitress raises AssertionError if set.
         },
     )
 
@@ -216,13 +213,11 @@ def artifact(run_id: str, relpath: str):
 
     parts = relative.parts
     public_dirs = {"sanitized", "trash_overlays"}
-    # The CityGML export is a published artifact: it contains only human-approved
-    # detections and carries no unredacted imagery.
+    # Published artifacts: human-approved detections only, no raw imagery.
     public_files = {"brief.md", "manifest.json", "trash_citygml.gml"}
     allowed = bool(parts) and (parts[0] in public_dirs or relative.as_posix() in public_files)
 
-    # Identity-visible source imagery is available only for the exact items in
-    # an active human privacy disagreement. It is never a general run artifact.
+    # Unredacted imagery is exposed only for items in an active privacy review.
     if parts and parts[0] == "images":
         run = Run.get(run_id)
         awaiting = run.awaiting if run and run.status == "awaiting_input" else None
@@ -290,8 +285,8 @@ def serve(host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> Non
         host=host,
         port=port,
         threads=16,
-        # SSE connections are long-lived by design and send a keepalive comment
-        # every 15s. The default 120s channel timeout would cut them mid-run.
+        # SSE streams are long-lived with a 15s keepalive; the default 120s
+        # channel timeout would cut them mid-run.
         channel_timeout=3600,
         ident="oasis-waste-agent",
     )

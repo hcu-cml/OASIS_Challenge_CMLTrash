@@ -114,9 +114,7 @@ class Run:
             "place": self.place,
             "prompt": self.place,
         }
-        # A hand-drawn box wins over the geocoder. Without this the bbox stayed
-        # in cfg and never reached the aoi node, so `state.get("bbox")` there was
-        # always None and the drawn area was silently ignored.
+        # Seed the state so a hand-drawn box takes precedence over the geocoder.
         if self.cfg.get("bbox"):
             initial["bbox"] = list(self.cfg["bbox"])
         self._spawn(initial)
@@ -284,8 +282,7 @@ class Run:
                     "total": event.get("total", 0),
                 }
             elif event.get("type") == "tool" and event.get("node"):
-                # Last call wins: the trace a reconnecting browser needs is where
-                # the node is now, not every call it has already finished.
+                # Last call wins, so a reconnecting browser sees current state.
                 tools[event["node"]] = {
                     "tool": event.get("tool"),
                     "detail": event.get("detail"),
@@ -297,8 +294,7 @@ class Run:
             "run_id": self.run_id,
             "status": self.status,
             "place": self.place,
-            # What the geocoder actually resolved, so a restored browser shows the
-            # surveyed area rather than the string that was typed into the box.
+            # Resolved area name, so a restored browser shows what was surveyed.
             "resolved_area": aoi_manifest.get("resolved"),
             "bbox": values.get("bbox"),
             "awaiting": self.awaiting,

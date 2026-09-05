@@ -1,8 +1,7 @@
 # Roadside Trash Agent
 <img width="1920" height="1080" alt="Screenshot (223)" src="https://github.com/user-attachments/assets/fc73842d-b169-4862-9a50-72984933da14" />
 
-
-An autonomous, privacy-first GeoAI agent that detects, segments, and maps roadside waste accumulations from street-level imagery. 
+An autonomous, privacy-first GeoAI agent that detects, segments, and maps roadside waste accumulations from street-level imagery.
 
 The agent pairs Vision-Language Models (**Gemma 4**) with instance segmentation (**SAM3**) in a verified human-in-the-loop workflow.
 
@@ -19,9 +18,9 @@ The agent pairs Vision-Language Models (**Gemma 4**) with instance segmentation 
 
 ---
 
-## Option 1: Instant Offline Demo (Docker)
+## Option 1: Offline Demo (Docker)
 
-If you just want to test and review the agent without setting up GPU dependencies, API tokens, or Ollama, we provide a pre-baked Docker demo containing **6,024 cached images from Dhaka, Bangladesh**, along with full LLM screening outputs and SAM3 masks.
+To try the agent without a GPU, API tokens, or Ollama, there is a prebuilt image with 6,024 cached images from Kaliganj, Gazipur (Dhaka Division), Bangladesh, along with the LLM screening output and SAM3 masks for them.
 
 ```bash
 # 1. Run the demo container in the background (Docker assigns a free host port)
@@ -31,8 +30,7 @@ docker run --rm -d -P --name demo-app socialgood/trash-agent-demo:latest
 docker port demo-app
 ```
 
-*Example output:* `5006/tcp -> 0.0.0.0:32768`  
-Open **http://localhost:32768** in your browser and click **Run Survey** to explore the complete workflow!
+That prints something like `5006/tcp -> 0.0.0.0:32768`. Open the mapped port, for example http://localhost:32768, and click Run Survey.
 
 To stop the container:
 ```bash
@@ -41,138 +39,125 @@ docker stop demo-app
 
 ---
 
-## Option 2: Live Mode (Survey Any Location Worldwide)
+## Option 2: Live Mode
 
-In live mode, the agent fetches real-time Mapillary imagery for any city or drawn bounding box, queries your local Ollama instance with Gemma 4, and runs live SAM3 segmentation.
+Live mode fetches current Mapillary imagery for any city or drawn box, screens it against your local Ollama instance, and runs SAM3 for real.
 
 ### 1. Prerequisites
 
-- **Python 3.10+** (Python 3.12 or 3.13 recommended)
-- **Mapillary Client Token** (free developer token from [Mapillary Developers](https://www.mapillary.com/dashboard/developers))
-- **HuggingFace Token (`HF_TOKEN`)** with approved access to [`facebook/sam3`](https://huggingface.co/facebook/sam3) for SAM3 segmentation & privacy redaction weights
-- **Ollama** installed and running with `gemma4`
+- Python 3.10+ (3.12 or 3.13 recommended; 3.14 works)
+- An NVIDIA GPU with current drivers. SAM3 falls back to CPU, but not fast enough for a full survey.
+- A Mapillary client token, free from [Mapillary Developers](https://www.mapillary.com/dashboard/developers)
+- A HuggingFace token (`HF_TOKEN`) with approved access to [`facebook/sam3`](https://huggingface.co/facebook/sam3), used for the segmentation and redaction weights
+- Ollama, running with `gemma4:31b`
 
 ---
 
 ### 2. Setting Up Ollama & Gemma 4
 
 1. Install [Ollama](https://ollama.com/).
-2. Pull the Gemma 4 vision model:
+2. Pull the vision model:
    ```bash
-   ollama pull gemma4
+   ollama pull gemma4:31b
    ```
-3. Make sure Ollama is running (`ollama serve` or via the background system service). By default, Ollama serves its OpenAI-compatible API at `http://localhost:11434/v1`.
+   Check the tag with `ollama list` and use exactly what it reports for `MODEL_VISION`. The value is passed to Ollama as-is, so a bare `gemma4` fails with a 404 when only `gemma4:31b` is installed.
+3. Leave Ollama running, either via `ollama serve` or the system service. It serves an OpenAI-compatible API at `http://localhost:11434/v1`.
 
-> **Remote Ollama Server**: If Ollama is running on another machine or GPU server on your LAN, start Ollama with `OLLAMA_HOST=0.0.0.0:11434` and set the URL in the configuration below.
+If Ollama runs on another machine on your LAN, start it with `OLLAMA_HOST=0.0.0.0:11434` and point `OLLAMA_BASE_URL` at that host.
 
 ---
 
 ### 3. Installation & Setup
 
-1. **Clone the repository:**
+1. Clone the repository:
    ```bash
    git clone https://github.com/hcu-cml/OASIS_Challenge_CMLTrash.git
    cd OASIS_Challenge_CMLTrash
    ```
 
-2. **Create and activate a virtual environment:**
+2. Create and activate a virtual environment:
    ```bash
    python3 -m venv venv
    source venv/bin/activate
    ```
 
-3. **Install dependencies:**
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
+   This pulls the SAM3 stack (`torch`, `torchvision`, `transformers`, `opencv-python-headless`), so expect around 3 GB of CUDA wheels.
 
-4. **Configure your environment:**
-   Copy `.env.example` to `.env`:
+4. Copy the config template and fill in your tokens:
    ```bash
    cp .env.example .env
    ```
-   Edit `.env` and fill in your keys (or enter them directly in the Web UI later):
-   ```ini
-   LLM_PROFILE=ollama
-   OLLAMA_BASE_URL=http://localhost:11434/v1
-   MODEL_VISION=gemma4
-   MAPILLARY_TOKEN=MLY|your_mapillary_token_here
-   HF_TOKEN=hf_your_huggingface_token_here
-   ```
-   *(When `HF_TOKEN` is provided, SAM3 model weights are automatically downloaded to `weights/sam3/` on the first live run).*
+   See [Configuration](#configuration-env) for what each key does. You can also enter the tokens in the web UI instead.
 
 ---
 
 ### 4. Running the Application
 
-1. **Start the web application:**
+1. Start the web app:
    ```bash
    python -m app.main serve --port 5006
    ```
 
-2. **Open the Dashboard:**
-   Navigate to **http://localhost:5006** in your browser.
+2. Open http://localhost:5006.
 
-3. **Configure Interactively (Top-Right Button):**
-   You don't need to manually edit `.env` if you prefer not to. Simply click the **Configure** button in the top-right corner of the dashboard to enter or reveal:
-   - **Mapillary Token**
-   - **HuggingFace Token (`HF_TOKEN`)**
-   - **Ollama Base URL**
-   
-   Settings saved in the UI take effect immediately for new runs.
+3. If you would rather not edit `.env`, use the Configure button in the top-right of the dashboard. It takes the Mapillary token, `HF_TOKEN`, and Ollama base URL, and applies them to the next run.
 
-4. **Run a Health Check (Optional CLI):**
-   You can also verify your environment, API tokens, and model endpoints from your terminal:
+4. To check your environment, tokens, and model endpoint from the terminal:
    ```bash
    python -m app.main doctor
    ```
+
+> The server has no authentication. Anyone who can reach it can start runs that spend your Mapillary quota and GPU time, so keep it on localhost or behind a proxy.
 
 ---
 
 ### 5. Alternative: Run with Docker (Live Mode)
 
-If you prefer to run the application in a Docker container while still using live Ollama inference, follow the steps below. **Ollama and the Gemma 4 model must be installed on the host machine first** — pulling a ~20 GB model inside a container is impractically slow.
+You can run the app in a container and still use live Ollama inference on the host. Pull `gemma4:31b` on the host first, as described in [Section 2](#2-setting-up-ollama--gemma-4) — fetching a model that size inside a container is not worth the wait.
 
-#### Prerequisites
+Beyond the [prerequisites](#1-prerequisites) above, this needs Docker with Compose v2 and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
 
-- **NVIDIA GPU** with up-to-date drivers
-- **Docker** (with Compose v2) and [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed
-- **Ollama installed on the host** with `gemma4` already pulled (see [Section 2](#2-setting-up-ollama--gemma-4) above)
-- **Mapillary Token** and **HuggingFace Token** in your `.env` file (see [Section 3](#3-installation--setup))
-
-#### Steps
-
-1. **Verify Ollama is running on the host with gemma4 ready:**
+1. Confirm Ollama is up on the host with the model ready:
    ```bash
-   ollama list          # should show gemma4
+   ollama list          # should show gemma4:31b
    ollama serve         # if not already running as a system service
    ```
 
-2. **Set your tokens in `.env`:**
-   ```bash
-   cp .env.example .env
-   # Edit .env and fill in MAPILLARY_TOKEN and HF_TOKEN
-   ```
+2. Put your tokens in `.env` (see [Section 3](#3-installation--setup)).
 
-3. **Build and start the app container:**
+3. Build and start the app container:
    ```bash
    docker compose up --build -d app
    ```
-   > This starts **only** the `app` service (not the `ollama` service from the compose file). The app container connects to your host's Ollama instance.
+   Naming `app` starts only that service, not the bundled `ollama` one, so the container talks to the Ollama on your host.
 
-4. **Open the dashboard** at **http://localhost:5050**.
+4. Open http://localhost:5050.
 
-5. **Follow logs:**
+5. Follow the logs:
    ```bash
    docker compose logs -f app
    ```
 
-6. **Stop the container:**
+6. Stop it:
    ```bash
    docker compose down
    ```
 
-> **Note:** By default, the app container reaches the host's Ollama via the Docker internal network. If you encounter connection issues, ensure Ollama is listening on all interfaces (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`) and set `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1` in your `.env` file.
+#### Setting `OLLAMA_BASE_URL`
+
+Inside a container, `localhost` means the container itself, so the value that works on the host does not work here. Pick the row that matches how you started things:
+
+| How you run it | `OLLAMA_BASE_URL` in `.env` |
+| --- | --- |
+| Native Python (no Docker) | `http://localhost:11434/v1` |
+| Only the `app` container, Ollama on the host | `http://host.docker.internal:11434/v1` |
+| Both containers (`docker compose up`) | leave unset or comment it out |
+
+If the container cannot reach Ollama it exits with `Ollama did not become reachable`. Check that Ollama listens on all interfaces (`OLLAMA_HOST=0.0.0.0:11434 ollama serve`) and that the value above matches your setup.
 
 ---
 
@@ -180,34 +165,25 @@ If you prefer to run the application in a Docker container while still using liv
 
 Copy `.env.example` to `.env` and fill in your values:
 
-```ini
-LLM_PROFILE=ollama
-OLLAMA_BASE_URL=http://localhost:11434/v1
-MODEL_VISION=gemma4
-MAPILLARY_TOKEN=
-HF_TOKEN=
-```
+| Key | What it does |
+| --- | --- |
+| `LLM_PROFILE` | Provider to use. `ollama` for live runs, `replay` to serve recorded fixtures. |
+| `OLLAMA_BASE_URL` | Where Ollama listens. See the table above when running in Docker. |
+| `MODEL_VISION` | Model tag for screening, exactly as `ollama list` reports it. |
+| `MAPILLARY_TOKEN` | Imagery access. Needed for live runs, not for replay. |
+| `HF_TOKEN` | Downloads the `facebook/sam3` weights to `weights/sam3/` on first live run. |
 
-> **In-App Configuration**: You can also view, enter, or update `MAPILLARY_TOKEN`, `HF_TOKEN`, and `OLLAMA_BASE_URL` directly in the web app by clicking the **Configure** button in the top-right corner of the dashboard.
+`MAPILLARY_TOKEN`, `HF_TOKEN`, and `OLLAMA_BASE_URL` can also be set from the Configure button in the dashboard, which takes effect on the next run.
 
 ---
 
 ## How to Use the Web Dashboard
 
-1. **Search or Draw an Area**:
-   - Type a location name in the top search bar (e.g. `Hazaribagh, Dhaka`, `Altona, Hamburg`), or
-   - Click **Draw box** to drag a custom bounding box directly on the map.
-2. **Start Survey**: Click **Run Survey**. The agent will start executing the workflow graph.
-3. **Live Progress Tracking**:
-   - Follow each node's status in the left sidebar and open the **Workflow Graph** modal to inspect the LangGraph pipeline.
-   - Watch the image screening counter in real-time.
-4. **Human-in-the-Loop Review**:
-   - If the vision model and segmentation model have disagreements, the review modal opens automatically.
-   - Toggle between the sanitized base image and the green overlay, and click **Approve mask** or **Exclude**.
-5. **View Detections & Export**:
-   - Click any detection point on the map to preview the sanitized image and mask.
-   - Click **Open Gallery** to inspect all approved findings.
-   - Download the generated **CityGML 2.0** file directly from the summary card.
+1. Search for an area by name in the top bar, for example `Kaliganj, Gazipur` or `Mirpur, Dhaka`. Or click Draw box and drag a bounding box on the map.
+2. Click Run Survey to start.
+3. Each node reports its status in the left sidebar, with a live count of screened images. The Workflow Graph modal shows the LangGraph pipeline.
+4. When the vision and segmentation models disagree, the review modal opens on its own. Toggle between the redacted image and the green mask overlay, then choose Approve mask or Exclude.
+5. Click any detection on the map to see its redacted image and mask, or Open Gallery for all approved findings. The CityGML file downloads from the summary card.
 
 ---
 
@@ -222,19 +198,22 @@ HF_TOKEN=
 │   │   └── schemas.py     # Pydantic data schemas
 │   ├── citygml.py         # CityGML 2.0 XML generator
 │   ├── geo.py             # Geospatial helpers & coordinate transformations
-│   ├── main.py            # CLI entrypoint (serve, run, doctor)
+│   ├── main.py            # CLI entrypoint (serve, run, doctor, record)
 │   ├── perception.py      # SAM3 segmentation & privacy redaction
 │   ├── sources.py         # Mapillary & Nominatim API clients
 │   └── web/               # Flask server and UI templates
-├── fixtures/              # Pre-recorded offline demo data (cache, masks, LLM outputs)
-├── Dockerfile.demo        # Dockerfile for the self-contained offline demo
+├── fixtures/golden/       # Reference export used to diff against new runs
+├── Dockerfile             # App image for live mode
+├── docker-compose.yml     # App + Ollama services, with GPU reservations
+├── Makefile               # Shortcuts for install, doctor, serve, run, docker
 ├── requirements.txt       # Python dependencies
 └── .env.example           # Example configuration template
 ```
+
 
 ---
 
 ## License & Acknowledgements
 
-- Street-level imagery provided by **[Mapillary](https://www.mapillary.com/)**.
-- Multimodal perception powered by **Google Gemma 4** and Meta AI's **SAM3**.
+- Street-level imagery provided by [Mapillary](https://www.mapillary.com/).
+- Perception uses Google's Gemma 4 and Meta AI's SAM3.

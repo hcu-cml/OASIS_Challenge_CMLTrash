@@ -173,10 +173,7 @@ def geocode_area(place: str) -> dict[str, Any]:
             "polygon_geojson": 1,
             "limit": 1,
             "addressdetails": 1,
-            # Without this Nominatim answers in the local script, so a search for
-            # "Mirpur, Dhaka" resolves correctly but comes back as
-            # "মিরপুর, ঢাকা, ...". The bbox was right and the run was fine, but the
-            # echoed area name looked like a failed lookup in the UI.
+            # Force Latin script; otherwise names echo back in the local script.
             "accept-language": "en",
         },
     )
@@ -215,13 +212,10 @@ def geocode_area(place: str) -> dict[str, Any]:
 MAPILLARY_FIELDS = "id,captured_at,compass_angle,geometry,sequence,thumb_1024_url,thumb_2048_url"
 
 
-# Mapillary rejects a bbox whose contents exceed an undocumented server-side
-# budget with HTTP 500 "Please reduce the amount of data you're asking for".
-# The trigger is image density, not the requested `limit`: in central Dhaka a
-# 0.02 degree tile fails at limit=50 while a 0.01 degree tile returns 1900
-# images. A fixed tile size therefore cannot serve both a sparsely covered
-# European district and a densely covered South Asian one, so tiles start small
-# and any tile that still overflows is subdivided.
+# Mapillary returns HTTP 500 when a bbox exceeds an undocumented data budget.
+# Image density drives this, not the requested `limit`, so no fixed tile size
+# suits both sparse and dense areas: tiles start small and overflowing tiles
+# are subdivided.
 TILE_START = 0.01
 TILE_FLOOR = 0.00125
 

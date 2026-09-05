@@ -40,5 +40,15 @@ record_demo.py
 # development and maintenance scripts
 scripts/
 
+# internal evaluation harness
+evaluations/
+
+# offline demo image build (published to Docker Hub, not built by users)
+Dockerfile.demo
+
+# documentation: only the top-level README is tracked
+*.md
+!/README.md
+
 
 
