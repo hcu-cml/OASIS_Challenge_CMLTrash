@@ -167,7 +167,7 @@ Copy `.env.example` to `.env` and fill in your values:
 
 | Key | What it does |
 | --- | --- |
-| `LLM_PROFILE` | Provider to use. `ollama` for live runs, `replay` to serve recorded fixtures. |
+| `LLM_PROFILE` | Provider to use.`ollama` for live runs |
 | `OLLAMA_BASE_URL` | Where Ollama listens. See the table above when running in Docker. |
 | `MODEL_VISION` | Model tag for screening, exactly as `ollama list` reports it. |
 | `MAPILLARY_TOKEN` | Imagery access. Needed for live runs, not for replay. |
