@@ -175,6 +175,18 @@ Copy `.env.example` to `.env` and fill in your values:
 
 `MAPILLARY_TOKEN`, `HF_TOKEN`, and `OLLAMA_BASE_URL` can also be set from the Configure button in the dashboard, which takes effect on the next run.
 
+### Optional: PostGIS time series
+
+Runs are saved to PostGIS when `DATABASE_URL` is set. Docker Compose starts the `db` service and sets it for you from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`.
+
+Detections are grouped into fixed square cells (`GRID_CELL_M`, default 250 m) that line up across runs, and bucketed by photo capture date. Each image is counted once, and only approved detections count.
+
+```
+GET /api/timeseries?cell_m=250&bucket=month&bbox=west,south,east,north
+```
+
+uses a rate rather than a raw count so results stay comparable when image coverage changes between runs.
+
 ---
 
 ## How to Use the Web Dashboard
