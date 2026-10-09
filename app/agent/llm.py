@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 PROFILES: dict[str, tuple[str, str]] = {
     "ollama": ("http://localhost:11434/v1", ""),
+    "saia": ("https://chat-ai.academiccloud.de/v1", "SAIA_API_KEY"),
     "replay": ("http://replay.invalid/v1", ""),
 }
 
@@ -30,7 +31,7 @@ LLM_SCHEMA_RETRIES = int(os.environ.get("LLM_SCHEMA_RETRIES", "2"))
 
 ROLE_CHAINS: dict[str, list[str]] = {
     # Substring-matched against served tags, so keep the published tag form.
-    "vision": ["gemma4", "gemma3"],
+    "vision": ["gemma4", "gemma3", "gemma-4", "gemma-3"],
 }
 
 SAMPLING: list[tuple[str, dict[str, float]]] = []

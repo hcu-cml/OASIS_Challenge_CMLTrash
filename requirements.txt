@@ -19,6 +19,9 @@ waitress==3.0.2
 requests==2.33.1
 pillow==12.2.0
 
+# Optional PostGIS store for grid-wise time series (used when DATABASE_URL is set)
+psycopg[binary]==3.2.10
+
 # Perception: SAM3 segmentation & privacy redaction.
 # Linux x86_64 wheels on PyPI are CUDA 12.8 builds. On CPU-only or non-CUDA
 # hosts, install the matching build from https://pytorch.org/get-started/locally/

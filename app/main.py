@@ -60,6 +60,16 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
 
     check("MAPILLARY_TOKEN set", bool(os.environ.get("MAPILLARY_TOKEN")), "needed only to record new areas")
 
+    from . import db
+
+    if db.enabled():
+        try:
+            check("PostGIS (DATABASE_URL)", True, f"PostGIS {db.ping()}")
+        except Exception as exc:
+            check("PostGIS (DATABASE_URL)", False, str(exc).splitlines()[0])
+    else:
+        check("PostGIS (DATABASE_URL)", True, "not set, time series storage disabled")
+
     try:
         import torch  # noqa: F401
 

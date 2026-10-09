@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 from langgraph.types import interrupt
 
-from .. import citygml, geo, perception, sources
+from .. import citygml, db, geo, perception, sources
 from .llm import Provider, jpeg_bytes
 from .schemas import (
     CoverageAudit,
@@ -707,8 +707,10 @@ class Nodes:
             export = state.get("citygml", {})
             md = _brief(state, audit, privacy, detection, observations, export)
             (self.run_dir / "brief.md").write_text(md, encoding="utf-8")
+            database = self._persist(r, state)
             manifest = {
                 **state.get("manifest", {}),
+                "database": database,
                 "summary": {
                     "source_images": len(state.get("images", [])),
                     "trash_screened_original_images": detection.get("screened_images", 0),
@@ -733,6 +735,30 @@ class Nodes:
             r.log(f"Wrote brief and manifest to {self.run_dir}")
             r.artifact("report", {"markdown": md})
             return {"report_md": md}
+
+    def _persist(self, r: NodeReporter, state: AgentState) -> dict[str, Any]:
+        """
+        Write the run to PostGIS when DATABASE_URL is set.
+
+        The files on disk remain the record of the run, so a database failure is
+        logged and noted in the manifest rather than failing the survey.
+        """
+        if not db.enabled():
+            return {"enabled": False}
+        try:
+            with r.tool("postgis.persist_run", "runs, images, observations"):
+                counts = db.persist_run({**state, "run_id": self.run_id}, vision_model=self._vision_label())
+        except RunCancelled:
+            raise
+        except Exception as exc:  # noqa: BLE001 - persistence must not fail a run
+            r.log(f"PostGIS write failed, artifacts are still on disk: {exc}", level="warn")
+            return {"enabled": True, "persisted": False, "error": f"{type(exc).__name__}: {exc}"}
+        r.log(
+            f"Stored {counts['screened_images']} screened image(s) and "
+            f"{counts['observations']} observation(s) "
+            f"({counts['approved_observations']} approved) in PostGIS"
+        )
+        return {"enabled": True, "persisted": True, **counts}
 
     def _vision_label(self) -> str:
         """Short model-family name used in reviewer-facing prose."""

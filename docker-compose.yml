@@ -28,7 +28,10 @@ services:
   app:
     build: .
     depends_on:
-      - ollama
+      ollama:
+        condition: service_started
+      db:
+        condition: service_healthy
     # Linux does not resolve host.docker.internal by default. Required when
     # OLLAMA_BASE_URL points at a native Ollama on the host.
     extra_hosts:
@@ -47,21 +50,47 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      LLM_PROFILE: ollama
+      # Defaults to ollama; set LLM_PROFILE=saia in .env to use GWDG SAIA
+      # instead (no local model container needed for the vision role then).
+      LLM_PROFILE: ${LLM_PROFILE:-ollama}
       # Defaults to the internal `ollama` service. Override with
       # http://host.docker.internal:11434/v1 to use a native Ollama on the host.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434/v1}
       OLLAMA_MODEL_TAG: gemma4:31b
-      MODEL_VISION: gemma4:31b
+      SAIA_API_KEY: ${SAIA_API_KEY:-}
+      MODEL_VISION: ${MODEL_VISION:-gemma4:31b}
       MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
       HF_TOKEN: ${HF_TOKEN:-}
       SAM3_DIR: /app/weights/sam3
       RUNS_DIR: /app/runs
+      DATABASE_URL: postgresql://${POSTGRES_USER:-trash}:${POSTGRES_PASSWORD:-trash}@db:5432/${POSTGRES_DB:-trash}
+      GRID_CELL_M: ${GRID_CELL_M:-250}
     volumes:
       - ./runs:/app/runs
       - ./weights:/app/weights
       - ./fixtures:/app/fixtures
     restart: unless-stopped
 
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trash}
+      POSTGRES_DB: ${POSTGRES_DB:-trash}
+    volumes:
+      - postgis-data:/var/lib/postgresql/data
+    # No host port published: the app reaches it at db:5432 on the internal
+    # network, and the app itself has no authentication. Uncomment to connect
+    # QGIS or psql from the host (keep it bound to localhost).
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
 volumes:
   ollama-models:
+  postgis-data:

@@ -197,6 +197,40 @@ def resume(run_id: str):
     return jsonify({"ok": True})
 
 
+@app.get("/api/timeseries")
+def timeseries():
+    """
+    Grid-wise trash time series from PostGIS, as GeoJSON.
+
+    Query params: cell_m (metres, default GRID_CELL_M or 250),
+    bucket (week|month|quarter|year), bbox=west,south,east,north (optional).
+    """
+    from .. import db
+
+    if not db.enabled():
+        return jsonify({"error": "DATABASE_URL is not set; time series storage is disabled."}), 503
+    bbox = None
+    if request.args.get("bbox"):
+        try:
+            w, s, e, n = (float(v) for v in request.args["bbox"].split(","))
+        except ValueError:
+            return jsonify({"error": "bbox must be west,south,east,north"}), 400
+        if not (-180 <= w < e <= 180 and -90 <= s < n <= 90):
+            return jsonify({"error": "bbox must be west,south,east,north"}), 400
+        bbox = [w, s, e, n]
+    try:
+        cell_m = float(request.args.get("cell_m", db.DEFAULT_CELL_M))
+        result = db.grid_timeseries(
+            cell_m=cell_m, bucket=request.args.get("bucket", "month"), bbox=bbox,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001 - surfaced to the caller
+        log.warning("time series query failed: %s", exc)
+        return jsonify({"error": "database query failed"}), 502
+    return jsonify(result)
+
+
 @app.get("/artifact/<run_id>/<path:relpath>")
 def artifact(run_id: str, relpath: str):
     """Serve sanitized outputs; reveal an original only at its active privacy gate."""
