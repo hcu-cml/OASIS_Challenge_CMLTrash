@@ -96,9 +96,47 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------- #
+def start_database() -> None:
+    """
+    When DATABASE_URL is set and the database is down, start the compose `db`
+    service. Never fatal: without it, runs still complete, just unsaved.
+    """
+    import shutil
+    import subprocess
+
+    from . import db
+
+    if not db.enabled():
+        return
+    try:
+        log.info("PostGIS %s is up", db.ping())
+        return
+    except Exception:
+        pass
+    if not shutil.which("docker"):
+        log.warning("DATABASE_URL is set but the database is down and docker is not installed")
+        return
+    log.info("Starting the PostGIS container (docker compose up -d --wait db) ...")
+    result = subprocess.run(
+        ["docker", "compose", "up", "-d", "--wait", "db"],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        log.warning("Could not start PostGIS: %s", (result.stderr or result.stdout).strip()[-500:])
+        return
+    try:
+        log.info("PostGIS %s is up", db.ping())
+    except Exception as exc:
+        log.warning("PostGIS container started but is not reachable: %s", exc)
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from .web.server import serve
 
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s | %(message)s"
+    )
+    start_database()
     serve(host=args.host, port=args.port, debug=args.debug)
     return 0
 
@@ -114,6 +152,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.max_images:
         overrides["max_images"] = args.max_images
 
+    start_database()
     run = Run(args.place, overrides)
     print(f"run_id={run.run_id}  profile={run.provider.profile}")
     run.start()
@@ -124,7 +163,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     out = Path(run.cfg["runs_dir"]) / run.run_id
     if snap["status"] == "done":
         print(f"brief:    {out / 'brief.md'}")
-        print(f"geojson:  {out / 'sites.geojson'}")
+        print(f"citygml:  {out / 'trash_citygml.gml'}")
+        print(f"geojson:  {out / 'trash_detections.geojson'}")
         print(f"manifest: {out / 'manifest.json'}")
         return 0
     print(json.dumps(snap.get("awaiting") or {}, indent=2)[:800], file=sys.stderr)

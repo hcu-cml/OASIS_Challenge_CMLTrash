@@ -34,6 +34,7 @@ from .state import (
 log = logging.getLogger(__name__)
 BLIND_SPOT_FRACTION = 0.25
 CITYGML_FILENAME = "trash_citygml.gml"
+GEOJSON_FILENAME = "trash_detections.geojson"
 
 
 class Nodes:
@@ -91,7 +92,8 @@ class Nodes:
             bbox = state["bbox"]
             with r.tool("mapillary.search", f"limit={self.cfg['max_images']}"):
                 images = sources.parse_images(sources.mapillary_search(
-                    bbox, self.cfg.get("mapillary_token", ""), limit=self.cfg["max_images"]
+                    bbox, self.cfg.get("mapillary_token", ""), limit=self.cfg["max_images"],
+                    check_cancel=self._check_cancel,
                 ))
             polygons = _grid_polygons(bbox)
             cells: list[CoverageCell] = []
@@ -520,7 +522,8 @@ class Nodes:
                     ))
                     masks.append({"path": str(mask_path), "prompt": instance.prompt,
                                   "score": instance.score, "area_px": int(instance.mask.sum())})
-                    is_candidate = bool(instances)
+                # Outside the mask loop so images without masks still define it.
+                is_candidate = bool(instances)
                 if is_candidate:
                     candidate_ids.append(row["image_id"])
                 rows.append({
@@ -675,9 +678,26 @@ class Nodes:
                 f"Wrote an empty CityGML {citygml.CITYGML_VERSION} document: "
                 "no detection was approved in this run"
             )
+            # Same approved features as the CityGML, as GeoJSON for QGIS and web maps.
+            geojson_out = self.run_dir / GEOJSON_FILENAME
+            geojson_out.write_text(json.dumps({
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {"type": "Point",
+                                 "coordinates": [float(o["camera_lon"]), float(o["camera_lat"])]},
+                    "properties": {key: o.get(key) for key in (
+                        "detection_id", "image_id", "captured_at", "compass_angle",
+                        "mask_area_px", "sam_prompt", "sam_score", "screen_confidence",
+                        "review_status",
+                    )} | {"position_source": "camera_gps_observation_point"},
+                } for o in exportable],
+            }, indent=2), encoding="utf-8")
             payload = {
                 "url": self._url(out),
                 "filename": CITYGML_FILENAME,
+                "geojson_url": self._url(geojson_out),
+                "geojson_filename": GEOJSON_FILENAME,
                 "features": count,
                 "skipped_without_coordinate": max(skipped, 0),
                 "bytes": out.stat().st_size,
@@ -720,7 +740,7 @@ class Nodes:
                     "accepted_observations": len(accepted),
                     "citygml_features": export.get("features", 0),
                 },
-                "artifacts": ["brief.md", "manifest.json", CITYGML_FILENAME],
+                "artifacts": ["brief.md", "manifest.json", CITYGML_FILENAME, GEOJSON_FILENAME],
                 "reviews": {
                     "trash": state.get("trash_reviews", []),
                 },
@@ -744,6 +764,11 @@ class Nodes:
         logged and noted in the manifest rather than failing the survey.
         """
         if not db.enabled():
+            r.log(
+                "PostGIS storage is off (DATABASE_URL not set): this run was not "
+                "added to the time series",
+                level="warn",
+            )
             return {"enabled": False}
         try:
             with r.tool("postgis.persist_run", "runs, images, observations"):
@@ -754,9 +779,9 @@ class Nodes:
             r.log(f"PostGIS write failed, artifacts are still on disk: {exc}", level="warn")
             return {"enabled": True, "persisted": False, "error": f"{type(exc).__name__}: {exc}"}
         r.log(
-            f"Stored {counts['screened_images']} screened image(s) and "
+            f"Recorded in PostGIS: {counts['screened_images']} screened image(s) and "
             f"{counts['observations']} observation(s) "
-            f"({counts['approved_observations']} approved) in PostGIS"
+            f"({counts['approved_observations']} approved), added to the time series"
         )
         return {"enabled": True, "persisted": True, **counts}
 

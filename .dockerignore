@@ -10,6 +10,9 @@ venv/
 runs/
 weights/
 
+# archived runs and caches, tens of GB
+old/
+
 .env
 *.sqlite
 *.sqlite3

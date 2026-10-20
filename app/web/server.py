@@ -94,6 +94,10 @@ def get_config():
     import os as _os
 
     keys = {
+        "LLM_PROFILE": _os.environ.get("LLM_PROFILE", "ollama"),
+        "MODEL_VISION": _os.environ.get("MODEL_VISION", ""),
+        "LLM_REASONING_EFFORT": _os.environ.get("LLM_REASONING_EFFORT", ""),
+        "OPENAI_API_KEY": _os.environ.get("OPENAI_API_KEY", ""),
         "MAPILLARY_TOKEN": _os.environ.get("MAPILLARY_TOKEN", ""),
         "HF_TOKEN": _os.environ.get("HF_TOKEN", ""),
         "OLLAMA_BASE_URL": _os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
@@ -101,7 +105,7 @@ def get_config():
     }
     # Report whether secrets are set, never their value.
     masked = {}
-    secret_keys = {"MAPILLARY_TOKEN", "HF_TOKEN"}
+    secret_keys = {"MAPILLARY_TOKEN", "HF_TOKEN", "OPENAI_API_KEY"}
     for key, value in keys.items():
         if key in secret_keys:
             masked[key] = {"set": bool(value), "preview": value[:6] + "…" if len(value) > 6 else ""}
@@ -109,6 +113,9 @@ def get_config():
             masked[key] = {"set": bool(value), "value": value}
             
     masked["REPLAY_MODE"] = {"set": True, "value": _os.environ.get("REPLAY", "0") == "1"}
+    from .. import db
+
+    masked["DATABASE"] = {"set": db.enabled()}
     
     return jsonify(masked)
 
@@ -118,23 +125,32 @@ def reveal_config(key: str):
     """Return the full value of a config key. Local-only server, no auth needed."""
     import os as _os
 
-    allowed = {"MAPILLARY_TOKEN", "HF_TOKEN", "OLLAMA_BASE_URL", "SAM3_DIR"}
+    allowed = CONFIG_KEYS | {"SAM3_DIR"}
     if key not in allowed:
         return jsonify({"error": "unknown key"}), 404
     return jsonify({"key": key, "value": _os.environ.get(key, "")})
 
 
+CONFIG_KEYS = {
+    "LLM_PROFILE", "MODEL_VISION", "LLM_REASONING_EFFORT", "OPENAI_API_KEY",
+    "MAPILLARY_TOKEN", "HF_TOKEN", "OLLAMA_BASE_URL",
+}
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
 @app.post("/api/config")
 def set_config():
-    """Update runtime environment variables (session-only, not persisted to .env)."""
-    import os as _os
+    """Update environment variables for this process and save them to .env."""
+    from dotenv import set_key
 
     body = request.get_json(force=True) or {}
-    allowed = {"MAPILLARY_TOKEN", "HF_TOKEN", "OLLAMA_BASE_URL"}
     applied = {}
     for key, value in body.items():
-        if key in allowed and isinstance(value, str):
-            _os.environ[key] = value
+        # Single-line strings only, so a pasted value cannot break .env.
+        if key in CONFIG_KEYS and isinstance(value, str) and "\n" not in value and "\r" not in value:
+            os.environ[key] = value
+            ENV_FILE.touch(exist_ok=True)
+            set_key(str(ENV_FILE), key, value)
             applied[key] = True
     return jsonify({"applied": applied})
 
@@ -183,6 +199,20 @@ def cancel(run_id: str):
     return jsonify({"ok": True, "status": status})
 
 
+@app.post("/api/restore/<run_id>")
+def restore(run_id: str):
+    """Continue a run from its SQLite checkpoint after a crash or server restart."""
+    if not run_id.isalnum():
+        return jsonify({"error": "invalid run id"}), 400
+    try:
+        run = Run.restore(run_id)
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 502
+    return jsonify({"run_id": run.run_id, "status": run.status})
+
+
 @app.post("/api/resume/<run_id>")
 def resume(run_id: str):
     """Deliver a human decision to a paused graph."""
@@ -222,13 +252,44 @@ def timeseries():
         cell_m = float(request.args.get("cell_m", db.DEFAULT_CELL_M))
         result = db.grid_timeseries(
             cell_m=cell_m, bucket=request.args.get("bucket", "month"), bbox=bbox,
+            # status=all also counts unreviewed disagreements.
+            include_pending=request.args.get("status") == "all",
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller
         log.warning("time series query failed: %s", exc)
         return jsonify({"error": "database query failed"}), 502
-    return jsonify(result)
+    response = jsonify(result)
+    if request.args.get("download"):
+        name = f"trash_timeseries_{int(cell_m)}m_{request.args.get('bucket', 'month')}.geojson"
+        response.headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
+@app.get("/api/db/dump")
+def db_dump():
+    """Full PostGIS backup as plain SQL, restorable with psql on another machine."""
+    import subprocess
+    from datetime import date
+
+    from .. import db
+
+    if not db.enabled():
+        return jsonify({"error": "DATABASE_URL is not set; time series storage is disabled."}), 503
+    # pg_dump runs inside the db container, so its version always matches the server.
+    result = subprocess.run(
+        ["docker", "compose", "exec", "-T", "db", "pg_dump", "--no-owner",
+         "-U", os.environ.get("POSTGRES_USER", "trash"), os.environ.get("POSTGRES_DB", "trash")],
+        cwd=Path(__file__).resolve().parents[2], capture_output=True,
+    )
+    if result.returncode != 0:
+        log.warning("pg_dump failed: %s", result.stderr.decode(errors="replace")[-500:])
+        return jsonify({"error": "database backup failed; is the db container running?"}), 502
+    return Response(
+        result.stdout, mimetype="application/sql",
+        headers={"Content-Disposition": f'attachment; filename="trash_db_{date.today():%Y%m%d}.sql"'},
+    )
 
 
 @app.get("/artifact/<run_id>/<path:relpath>")
@@ -248,7 +309,7 @@ def artifact(run_id: str, relpath: str):
     parts = relative.parts
     public_dirs = {"sanitized", "trash_overlays"}
     # Published artifacts: human-approved detections only, no raw imagery.
-    public_files = {"brief.md", "manifest.json", "trash_citygml.gml"}
+    public_files = {"brief.md", "manifest.json", "trash_citygml.gml", "trash_detections.geojson"}
     allowed = bool(parts) and (parts[0] in public_dirs or relative.as_posix() in public_files)
 
     # Unredacted imagery is exposed only for items in an active privacy review.

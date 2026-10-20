@@ -94,10 +94,13 @@ CREATE INDEX IF NOT EXISTS trash_obs_status_idx ON trash_observations (review_st
 
 -- Grid-wise time series. Usable from psql/QGIS too, e.g.
 --   SELECT * FROM trash_grid_timeseries(250, 'month');
+-- Old 3-argument signature; replaced by the version with a status filter.
+DROP FUNCTION IF EXISTS trash_grid_timeseries(double precision, text, geometry);
 CREATE OR REPLACE FUNCTION trash_grid_timeseries(
     cell_m double precision DEFAULT 250,
     bucket text DEFAULT 'month',
-    area   geometry DEFAULT NULL
+    area   geometry DEFAULT NULL,
+    statuses text[] DEFAULT ARRAY['approved']
 )
 RETURNS TABLE (
     cell_id           text,
@@ -124,7 +127,7 @@ LANGUAGE sql STABLE AS $$
     det AS (
         SELECT o.image_id, count(*) AS n, sum(o.mask_area_px) AS px
         FROM trash_observations o
-        WHERE o.review_status = 'approved'
+        WHERE o.review_status = ANY(statuses)
         GROUP BY o.image_id
     )
     SELECT
@@ -356,11 +359,16 @@ def grid_timeseries(
     cell_m: float = DEFAULT_CELL_M,
     bucket: str = "month",
     bbox: list[float] | None = None,
+    include_pending: bool = False,
 ) -> dict[str, Any]:
     """
     Per-cell time series as a GeoJSON FeatureCollection: one feature per cell,
     with its periods ordered oldest first under properties.series.
+
+    By default only human-approved detections count; include_pending also
+    counts unreviewed model disagreements.
     """
+    statuses = ["approved", "pending"] if include_pending else ["approved"]
     if bucket not in BUCKETS:
         raise ValueError(f"bucket must be one of {', '.join(BUCKETS)}")
     cell_m = float(cell_m)
@@ -372,6 +380,7 @@ def grid_timeseries(
     if bbox:
         area_sql = "ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
         params.extend(float(v) for v in bbox)
+    params.append(statuses)
 
     with _connect() as conn:
         ensure_schema(conn)
@@ -381,7 +390,7 @@ def grid_timeseries(
                 SELECT cell_id, ix, iy, period, images_screened, images_with_trash,
                        detections, mask_area_px, detections_per_100_images,
                        ST_AsGeoJSON(cell_geom, 7)
-                FROM trash_grid_timeseries(%s, %s, {area_sql})
+                FROM trash_grid_timeseries(%s, %s, {area_sql}, %s::text[])
                 """,
                 params,
             )
@@ -405,9 +414,11 @@ def grid_timeseries(
         })
     return {
         "type": "FeatureCollection",
-        "grid": {"crs": f"EPSG:{GRID_SRID}", "cell_m": cell_m, "bucket": bucket},
+        "grid": {"crs": f"EPSG:{GRID_SRID}", "cell_m": cell_m, "bucket": bucket,
+                 "statuses": statuses},
         "notes": (
-            "Counts are human-approved detections, deduplicated by Mapillary image, "
+            f"Counts are detections with status {' or '.join(statuses)}, "
+            "deduplicated by Mapillary image, "
             "bucketed by image capture time (UTC). Positions are camera points. "
             "Compare detections_per_100_images across periods, not raw counts."
         ),

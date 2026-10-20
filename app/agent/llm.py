@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 PROFILES: dict[str, tuple[str, str]] = {
     "ollama": ("http://localhost:11434/v1", ""),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
     "saia": ("https://chat-ai.academiccloud.de/v1", "SAIA_API_KEY"),
     "replay": ("http://replay.invalid/v1", ""),
 }
@@ -45,7 +46,7 @@ def replay_only() -> bool:
     return os.environ.get("LLM_PROFILE", "ollama") == "replay"
 
 
-def sampling_for(model_id: str) -> dict[str, float]:
+def sampling_for(model_id: str) -> dict[str, Any]:
     lowered = model_id.lower()
     for needle, params in SAMPLING:
         if needle in lowered:
@@ -60,7 +61,9 @@ class LLM:
     role: str
     model: str
     client: OpenAI
-    params: dict[str, float] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
+    # OpenAI's reasoning models reject `max_tokens` and want `max_completion_tokens`.
+    token_param: str = "max_tokens"
 
     def chat(
         self,
@@ -107,7 +110,7 @@ class LLM:
             resp = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                max_tokens=budget,
+                **{self.token_param: budget},
                 **self.params,
             )
             choice = resp.choices[0]
@@ -135,7 +138,10 @@ class LLM:
                 f"(finish_reason={finish_reason!r})"
             )
 
-        path.parent.mkdir(parents=True, exist_ok=True)
+        from ..sources import write_json_atomic
+
+        # `model` lets _discard_invalid_live_cache drop only this model's bad output.
+        write_json_atomic(path, {"model": self.model, "content": answer})
         return answer
 
     def _cache_path(self, system: str, user: str, images: list[bytes] | None) -> Path:
@@ -264,7 +270,15 @@ class Provider:
 
         override = os.environ.get("MODEL_VISION")
         model = override or self._resolve(role)
-        llm = LLM(role=role, model=model, client=self.client, params=sampling_for(model))
+        params: dict[str, Any] = sampling_for(model)
+        # Optional, e.g. LLM_REASONING_EFFORT=none for OpenAI reasoning models.
+        effort = os.environ.get("LLM_REASONING_EFFORT", "").strip()
+        if effort:
+            params["reasoning_effort"] = effort
+        llm = LLM(
+            role=role, model=model, client=self.client, params=params,
+            token_param="max_completion_tokens" if self.profile == "openai" else "max_tokens",
+        )
         self._cache[role] = llm
         log.info("role=%s -> model=%s (%s)", role, model, self.profile)
         return llm

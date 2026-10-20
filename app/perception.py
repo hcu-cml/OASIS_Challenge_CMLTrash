@@ -280,6 +280,16 @@ class Segmenter:
         instances = self.segment(
             image_path, effective_prompts, check_cancel=check_cancel
         )
+        from .sources import write_json_atomic
+
+        # Same layout the cache-hit branch above reads back.
+        write_json_atomic(path, {
+            "image_id": image_id,
+            "prompts": effective_prompts,
+            "masks": [rle_encode(inst.mask) for inst in instances],
+            "mask_prompts": [inst.prompt for inst in instances],
+            "scores": [None if inst.score is None else float(inst.score) for inst in instances],
+        })
         return instances
 
 

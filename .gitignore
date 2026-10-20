@@ -16,6 +16,7 @@ weights/*
 # run outputs & databases
 output/
 runs/
+old/
 *.sqlite
 *.sqlite3
 
@@ -52,3 +53,4 @@ Dockerfile.demo
 
 
 
+exports/

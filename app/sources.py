@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -39,6 +40,8 @@ def _session() -> requests.Session:
                 backoff_factor=1.5,
                 status_forcelist=[429, 502, 503, 504],
                 allowed_methods=frozenset(["GET", "POST"]),
+                connect=3,
+                backoff_max=20,
             )
         ),
     )
@@ -81,13 +84,40 @@ def cached_json(
         )
 
     http = session or SESSION
+    # (connect, read). The read timeout limits the gap between bytes, not the whole call.
+    req_timeout = (10, timeout)
     if method == "GET":
-        resp = http.get(url, params=params, timeout=timeout)
+        resp = http.get(url, params=params, timeout=req_timeout)
     else:
-        resp = http.post(url, params=params, data=data, timeout=timeout)
+        resp = http.post(url, params=params, data=data, timeout=req_timeout)
     resp.raise_for_status()
     body = resp.json()
+    write_json_atomic(path, body)
     return body
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """Hard-link src to dst, falling back to a copy across filesystems."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.unlink(missing_ok=True)
+        try:
+            os.link(src, tmp)
+        except OSError:
+            import shutil
+            shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def write_json_atomic(path: Path, payload: Any) -> None:
+    """Write via a temp file and rename, so readers never see a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 # --------------------------------------------------------------------------- #
@@ -220,43 +250,98 @@ TILE_START = 0.01
 TILE_FLOOR = 0.00125
 
 
-def mapillary_search(bbox: list[float], token: str, limit: int = 400) -> list[dict]:
-    """Search images in a bbox, subdividing tiles that overflow the API budget."""
+MAPILLARY_TIMEOUT = 20.0  # seconds per request
+MAPILLARY_TILE_RETRIES = 2  # per tile, timeouts and connection errors only
+# Whole-search limits; 0 means unlimited.
+MAPILLARY_MAX_TILES = int(os.environ.get("MAPILLARY_MAX_TILES", "0"))
+MAPILLARY_DEADLINE_SECONDS = int(os.environ.get("MAPILLARY_DEADLINE_SECONDS", "0"))
+
+
+def mapillary_search(
+    bbox: list[float], token: str, limit: int = 400,
+    check_cancel: Callable[[], None] | None = None,
+) -> list[dict]:
+    """
+    Search images in a bbox, subdividing tiles that overflow the API budget.
+
+    A tile that keeps failing is skipped, so one bad patch cannot stall the run.
+    """
     west, south, east, north = bbox
     area = (east - west) * (north - south)
     pending = _tiles(bbox, TILE_START) if area > TILE_START**2 else [list(bbox)]
 
     seen: set[str] = set()
     out: list[dict] = []
+    tiles_processed = 0
+    skipped_tiles = 0
+    deadline = (
+        time.monotonic() + MAPILLARY_DEADLINE_SECONDS if MAPILLARY_DEADLINE_SECONDS > 0 else None
+    )
     while pending and len(out) < limit:
+        if check_cancel:
+            check_cancel()
+        if deadline is not None and time.monotonic() > deadline:
+            log.warning(
+                "Mapillary search hit its %d minute deadline with %d tile(s) "
+                "still pending; returning %d image(s) found so far",
+                MAPILLARY_DEADLINE_SECONDS // 60, len(pending), len(out),
+            )
+            break
+        if MAPILLARY_MAX_TILES > 0 and tiles_processed >= MAPILLARY_MAX_TILES:
+            log.warning(
+                "Mapillary search hit the %d tile cap with %d tile(s) still "
+                "pending; returning %d image(s) found so far",
+                MAPILLARY_MAX_TILES, len(pending), len(out),
+            )
+            break
+
         w, s, e, n = pending.pop()
-        try:
-            params = {
-                "access_token": token,
-                "fields": MAPILLARY_FIELDS,
-                "bbox": f"{w},{s},{e},{n}",
-                "limit": min(2000, limit - len(out)),
-                "start_captured_at": "2023-01-01T00:00:00Z",
-            }
-            
-            body = cached_json(
-                "mapillary",
-                f"{MAPILLARY}/images",
-                params=params,
-            )
-        except requests.HTTPError as exc:
-            if exc.response is None or exc.response.status_code != 500:
-                raise
-            if min(e - w, n - s) / 2 < TILE_FLOOR:
-                log.warning(
-                    "Mapillary still overflows at the %.5f degree floor for "
-                    "bbox %.4f,%.4f,%.4f,%.4f; skipping this tile", TILE_FLOOR, w, s, e, n
+        tiles_processed += 1
+        params = {
+            "access_token": token,
+            "fields": MAPILLARY_FIELDS,
+            "bbox": f"{w},{s},{e},{n}",
+            "limit": min(2000, limit - len(out)),
+            "start_captured_at": "2023-01-01T00:00:00Z",
+        }
+
+        body = None
+        for attempt in range(MAPILLARY_TILE_RETRIES + 1):
+            try:
+                body = cached_json(
+                    "mapillary", f"{MAPILLARY}/images", params=params,
+                    timeout=MAPILLARY_TIMEOUT,
                 )
-                continue
-            log.info(
-                "Mapillary overflow at %.4f degrees, subdividing tile %.4f,%.4f", e - w, w, s
-            )
-            pending.extend(_quarters([w, s, e, n]))
+                break
+            except requests.HTTPError as exc:
+                if exc.response is None or exc.response.status_code != 500:
+                    raise
+                if min(e - w, n - s) / 2 < TILE_FLOOR:
+                    log.warning(
+                        "Mapillary still overflows at the %.5f degree floor for "
+                        "bbox %.4f,%.4f,%.4f,%.4f; skipping this tile", TILE_FLOOR, w, s, e, n
+                    )
+                else:
+                    log.info(
+                        "Mapillary overflow at %.4f degrees, subdividing tile %.4f,%.4f",
+                        e - w, w, s,
+                    )
+                    pending.extend(_quarters([w, s, e, n]))
+                break
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                if attempt < MAPILLARY_TILE_RETRIES:
+                    log.info(
+                        "Mapillary %s on tile %.4f,%.4f (attempt %d/%d), retrying",
+                        type(exc).__name__, w, s, attempt + 1, MAPILLARY_TILE_RETRIES + 1,
+                    )
+                    continue
+                log.warning(
+                    "Mapillary tile %.4f,%.4f,%.4f,%.4f kept failing (%s); "
+                    "skipping it rather than hanging the whole survey",
+                    w, s, e, n, type(exc).__name__,
+                )
+                skipped_tiles += 1
+        if body is None:
             continue
 
         for img in body.get("data", []):
@@ -264,6 +349,12 @@ def mapillary_search(bbox: list[float], token: str, limit: int = 400) -> list[di
             if iid and iid not in seen:
                 seen.add(iid)
                 out.append(img)
+
+    if skipped_tiles:
+        log.warning(
+            "%d tile(s) were skipped after repeated timeouts/connection errors; "
+            "coverage in those spots will be incomplete", skipped_tiles,
+        )
     return out[:limit]
 
 
@@ -339,8 +430,7 @@ def download_thumbs(
             
         cached = Path("fixtures/images") / f"{meta['image_id']}.jpg"
         if cached.exists():
-            import shutil
-            shutil.copyfile(cached, out)
+            _link_or_copy(cached, out)
             meta["local_path"] = str(out)
             return True
             
@@ -355,6 +445,11 @@ def download_thumbs(
                         check_cancel()
                     fh.write(chunk)
             meta["local_path"] = str(out)
+            # Share the image across runs via the image cache.
+            try:
+                _link_or_copy(out, cached)
+            except OSError as exc:
+                log.warning("could not cache thumb %s: %s", meta["image_id"], exc)
             return True
         except Exception as exc:
             if check_cancel:

@@ -67,9 +67,17 @@ class Run:
     _registry: dict[str, "Run"] = {}
     _lock = threading.Lock()
 
-    def __init__(self, place: str, overrides: dict[str, Any] | None = None):
-        self.run_id = uuid.uuid4().hex[:10]
-        self.cfg = {**DEFAULTS, **(overrides or {})}
+    def __init__(
+        self, place: str, overrides: dict[str, Any] | None = None, run_id: str | None = None,
+    ):
+        # An explicit run_id reattaches to an existing checkpoint thread and run dir.
+        self.run_id = run_id or uuid.uuid4().hex[:10]
+        # Read the token now, not at import, so a value saved from the UI applies.
+        self.cfg = {
+            **DEFAULTS,
+            "mapillary_token": os.environ.get("MAPILLARY_TOKEN", ""),
+            **(overrides or {}),
+        }
         self.place = place
         self.thread = {"configurable": {"thread_id": self.run_id}}
 
@@ -118,6 +126,59 @@ class Run:
         if self.cfg.get("bbox"):
             initial["bbox"] = list(self.cfg["bbox"])
         self._spawn(initial)
+
+    @classmethod
+    def restore(cls, run_id: str) -> "Run":
+        """
+        Reattach to a run whose process died, continuing from its last
+        checkpoint. Completed nodes are not re-executed, and per-image SAM3
+        results are reused from the mask cache.
+        """
+        existing = cls.get(run_id)
+        if existing is not None:
+            return existing
+        run = cls("", run_id=run_id)
+        try:
+            snap = run.app.get_state(run.thread)
+        except Exception:
+            run.close()
+            raise
+        if not snap.values:
+            run.close()
+            raise LookupError(f"no checkpoint found for run {run_id}")
+        values = snap.values
+        run.place = values.get("place") or values.get("prompt") or ""
+        if values.get("bbox"):
+            run.cfg["bbox"] = list(values["bbox"])
+
+        BUS.emit(
+            run.run_id, "run_start",
+            run_id=run.run_id, place=run.place,
+            nodes=NODES, edges=GRAPH_EDGES,
+            provider=run.provider.profile, restored=True,
+        )
+        if not snap.next:
+            run.status = "done"
+            BUS.emit(run.run_id, "done", run_id=run.run_id)
+            return run
+        interrupts = [i for task in snap.tasks for i in (task.interrupts or ())]
+        if interrupts:
+            # Paused at a human gate: re-offer it instead of re-running anything.
+            payload = interrupts[0].value
+            run.awaiting = payload
+            run.status = "awaiting_input"
+            kind = payload.get("kind") if isinstance(payload, dict) else None
+            BUS.emit(
+                run.run_id, "await_input",
+                node={"trash_disagreement_review": "review_trash"}.get(kind, "review"),
+                kind=kind,
+                payload=payload.get("items", []) if isinstance(payload, dict) else payload,
+            )
+            return run
+        log.info("restoring run %s at %s", run_id, list(snap.next))
+        # None input = continue the thread from its last checkpoint.
+        run._spawn(None)
+        return run
 
     def resume(self, payload: dict[str, Any]) -> None:
         """Feed a human decision back into the paused graph."""

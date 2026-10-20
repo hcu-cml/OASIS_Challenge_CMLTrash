@@ -1079,6 +1079,17 @@
       transition: box-shadow .18s ease, transform .18s ease
     }
 
+    /* stacked export buttons: same look as a single .dl, evenly spaced */
+    .dl-group {
+      display: grid;
+      gap: 8px;
+      margin-top: 13px
+    }
+
+    .dl-group a.dl {
+      margin-top: 0
+    }
+
     a.dl:hover {
       box-shadow: var(--out);
       text-shadow: 0 0 14px rgba(74, 222, 155, .45)
@@ -1521,7 +1532,7 @@
       <div class="modal-head">
         <div>
           <h1>Configure</h1>
-          <div class="subtitle">API keys for Mapillary and HuggingFace. Changes apply to new runs only.</div>
+          <div class="subtitle">Model and API keys. Saved to .env; changes apply to new runs.</div>
         </div><button class="secondary close" id="configClose">Close</button>
       </div>
       <div class="modal-body" id="configBody">
@@ -1538,8 +1549,7 @@
     const $ = id => document.getElementById(id), EMPTY = { type: "FeatureCollection", features: [] },
       RUN_KEY = "roadside-trash-current-run", PLACE_KEY = "roadside-trash-last-place";
     let runId = null, events = null, drawnBbox = null, drawing = false, dragStart = null, reconnectTimer = null, reconnectAttempts = 0, streamGeneration = 0, terminal = false;
-    let isOfflineDemo = false, lastGeocodedBbox = null;
-    const CACHED_BBOX = [90.4281, 23.8638, 90.6040, 23.9588];
+    let isOfflineDemo = false, lastGeocodedBbox = null, dbEnabled = false, lastCityGml = null;
     let graphNodes = [], graphEdges = [], detections = [], reviewKind = null, reviewItems = [], decisions = new Map();
     const map = new maplibregl.Map({ container: "map", attributionControl: false, style: { version: 8, sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap contributors" } }, layers: [{ id: "osm", type: "raster", source: "osm" }] }, center: [90.38, 23.74], zoom: 12 });
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
@@ -1764,12 +1774,15 @@
     function renderPrivacy(s) { if (!s) return; $("mHuman").textContent = s.human_masks ?? s.raw_masks ?? 0; updateDisagreements(s.disagreements ?? 0, null) }
     function fmtBytes(n) { const v = Number(n); if (!Number.isFinite(v)) return ""; return v < 1024 ? `${v} B` : v < 1048576 ? `${(v / 1024).toFixed(1)} kB` : `${(v / 1048576).toFixed(1)} MB` }
     function renderCityGml(d) {
+      lastCityGml = d && d.url ? d : null;
       const box = $("citygml"); if (!d || !d.url) { box.className = "muted"; box.textContent = "Written after human review."; return }
       const features = Number(d.features) || 0; box.className = "";
       const skipped = Number(d.skipped_without_coordinate) || 0;
       box.innerHTML = `<table class="table"><tr><td>Approved features</td><td class="num">${features}</td></tr><tr><td>CityGML version</td><td class="num">${esc(d.version || "2.0")}</td></tr><tr><td>Feature type</td><td class="num">${esc(d.feature_type || "gen:GenericCityObject")}</td></tr><tr><td>File size</td><td class="num">${esc(fmtBytes(d.bytes))}</td></tr>${skipped ? `<tr><td>Skipped, no coordinate</td><td class="num">${skipped}</td></tr>` : ""}</table>`
-        + `<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">`
+        + `<div class="dl-group">`
         + `<a class="dl" href="${esc(d.url)}" download="${esc(d.filename || "trash_citygml.gml")}">Download CityGML${features ? "" : " (empty)"}</a>`
+        + (d.geojson_url ? `<a class="dl" href="${esc(d.geojson_url)}" download="${esc(d.geojson_filename || "trash_detections.geojson")}">Download GeoJSON${features ? "" : " (empty)"}</a>` : "")
+        + (dbEnabled ? `<a class="dl" href="/api/db/dump" title="All runs saved to PostGIS, as SQL. Restore with psql.">Download Database</a>` : "")
         + `</div>`
         + `<p class="hint" style="margin:10px 0 0">Each feature is placed at the camera GPS position it was observed from.</p>`
         + (features ? "" : `<p class="hint" style="margin:6px 0 0">No detection was approved, so the document contains no features.</p>`)
@@ -1874,7 +1887,7 @@
     async function hydrateState() { if (!runId) return { known: false, status: null }; const response = await fetch(`/api/state/${encodeURIComponent(runId)}`, { cache: "no-store" }); if (response.status === 404) return { known: false, status: null }; let state = {}; try { state = await response.json() } catch (_error) { throw new Error(`State probe returned HTTP ${response.status}`) } if (!response.ok) throw new Error(state.error || `State probe returned HTTP ${response.status}`); return { known: true, status: applySnapshot(state), state } }
     function resetRunUi() { closeStream(); runId = null; streamCursor = 0; terminal = false; reconnectAttempts = 0; sessionStorage.removeItem(RUN_KEY); graphNodes = []; graphEdges = []; detections = []; reviewKind = null; reviewItems = []; decisions = new Map(); submittedReviewKinds = new Set(); privacyDisagreements = 0; trashDisagreements = 0; toolState.clear(); closeReview(); $("provider").textContent = "starting"; $("rail").innerHTML = `<li><span class="dot"></span><span class="rail-body"><span class="rail-name">Starting run…</span><span class="rail-tool">requesting graph metadata</span></span></li>`; $("railCount").textContent = ""; $("graphGrid").innerHTML = `<div class="empty">Loading executable graph metadata…</div>`; $("log").innerHTML = ""; $("coverage").textContent = "Not run yet."; renderCityGml(null);["mSource", "mHuman", "mTrash", "mDisagree"].forEach(id => $(id).textContent = "–"); $("galleryOpen").disabled = true; $("galleryCards").innerHTML = ""; setResolvedArea(null); showBanner(""); sourceData("cameras", EMPTY) }
     function handleArtifact(event) { const data = event.data; switch (event.kind) { case "aoi": renderAoi(data); break; case "coverage": renderCoverage(data); break; case "images": renderCameras(data); break; case "privacy_segmentation": renderPrivacy(data); break; case "detections": renderDetections(data); break; case "citygml": renderCityGml(data); break; case "report": showBanner("Survey complete. Brief and manifest written."); break } }
-    function handleEvent(event) { if (event.run_id && runId && event.run_id !== runId) return; switch (event.type) { case "run_start": graphNodes = event.nodes || []; graphEdges = event.edges || []; buildRail(graphNodes); renderGraph(graphNodes, graphEdges); $("provider").textContent = event.provider || "connected"; logLine("system", `Run ${event.run_id} started.`); break; case "node_start": nodeState(event.node, "active"); logLine(event.node, "node started"); break; case "tool": trackTool(event); break; case "screen_progress": screenProgress(event.progress || event.data || event); break; case "node_end": nodeState(event.node, event.cancelled ? "cancelled" : "done", event.duration_ms); if (!event.cancelled && (event.node === "blur_humans" || event.node === "redact_humans")) hydrateState().catch(error => logLine("state", error.message, "warn")); break; case "paused": nodeState(event.node, "active", event.duration_ms); break; case "log": logLine(event.node, event.message, event.level || ""); break; case "artifact": handleArtifact(event); break; case "await_input": setRunControls("awaiting_input"); $("provider").textContent = "awaiting review"; if (!submittedReviewKinds.has(event.kind) && reviewKind !== event.kind) { if (event.kind === "human_privacy_review") updateDisagreements(event.payload?.length ?? 0, null); else updateDisagreements(null, event.payload?.length ?? 0); openReview(event.kind, event.payload || []) } break; case "input_received": logLine("review", `Input received for ${event.payload_kind}.`); break; case "cancel_requested": setStopping(event.message); break; case "cancelled": finishRun("cancelled", event.message || "Run cancelled. Partial results remain visible."); logLine("system", "Run cancelled.", "warn"); break; case "done": finishRun("complete", "Survey complete. Review the factual sites and green-mask gallery."); break; case "error": if (event.node) nodeState(event.node, "failed", event.duration_ms); finishRun("error", event.message || "Run failed.", true); logLine(event.node || "system", event.message || "Run failed.", "error"); break } }
+    function handleEvent(event) { if (event.run_id && runId && event.run_id !== runId) return; switch (event.type) { case "run_start": graphNodes = event.nodes || []; graphEdges = event.edges || []; buildRail(graphNodes); renderGraph(graphNodes, graphEdges); $("provider").textContent = "running"; logLine("system", `Run ${event.run_id} started.`); break; case "node_start": nodeState(event.node, "active"); logLine(event.node, "node started"); break; case "tool": trackTool(event); break; case "screen_progress": screenProgress(event.progress || event.data || event); break; case "node_end": nodeState(event.node, event.cancelled ? "cancelled" : "done", event.duration_ms); if (!event.cancelled && (event.node === "blur_humans" || event.node === "redact_humans")) hydrateState().catch(error => logLine("state", error.message, "warn")); break; case "paused": nodeState(event.node, "active", event.duration_ms); break; case "log": logLine(event.node, event.message, event.level || ""); break; case "artifact": handleArtifact(event); break; case "await_input": setRunControls("awaiting_input"); $("provider").textContent = "awaiting review"; if (!submittedReviewKinds.has(event.kind) && reviewKind !== event.kind) { if (event.kind === "human_privacy_review") updateDisagreements(event.payload?.length ?? 0, null); else updateDisagreements(null, event.payload?.length ?? 0); openReview(event.kind, event.payload || []) } break; case "input_received": logLine("review", `Input received for ${event.payload_kind}.`); break; case "cancel_requested": setStopping(event.message); break; case "cancelled": finishRun("cancelled", event.message || "Run cancelled. Partial results remain visible."); logLine("system", "Run cancelled.", "warn"); break; case "done": finishRun("complete", "Survey complete. Review the factual sites and green-mask gallery."); break; case "error": if (event.node) nodeState(event.node, "failed", event.duration_ms); finishRun("error", event.message || "Run failed.", true); logLine(event.node || "system", event.message || "Run failed.", "error"); break } }
     let streamCursor = 0;
     function scheduleReconnect(generation) { if (generation !== streamGeneration || terminal || !runId) return; if (reconnectAttempts >= 5) { finishRun("interrupted", "Live updates could not be restored after several attempts. The run state is unknown; start a new survey.", true); return } const delays = [1000, 2000, 4000, 8000, 12000], delay = delays[reconnectAttempts++]; $("provider").textContent = `reconnecting ${reconnectAttempts}/5`; reconnectTimer = setTimeout(() => { reconnectTimer = null; connectEvents() }, delay) }
     async function probeAfterStreamFailure(generation) { if (generation !== streamGeneration || terminal || !runId) return; logLine("stream", "Live connection lost; checking authoritative run state…", "warn"); try { const result = await hydrateState(); if (generation !== streamGeneration || terminal) return; if (!result.known) { finishRun("interrupted", "This run is no longer known by the server, likely because it restarted. Start a new survey.", true); return } if (isActiveStatus(result.status)) scheduleReconnect(generation) } catch (error) { logLine("state", `State probe failed: ${error.message}`, "warn"); scheduleReconnect(generation) } }
@@ -1885,10 +1898,13 @@
       setRunControls("created"); 
       
       try { 
-        const payload = { 
-          max_images: 1000000000, 
-          bbox: CACHED_BBOX 
-        }; 
+        // Use what the user chose: a drawn box first, otherwise the searched place.
+        const place = $("place").value.trim();
+        if (!drawnBbox && !place) throw new Error("Search for a place or draw a box on the map first.");
+        const maxImages = parseInt($("maxImages").value, 10) || 60;
+        const payload = { place: drawnBbox ? "" : place, max_images: maxImages };
+        if (drawnBbox) payload.bbox = drawnBbox;
+        else if (lastGeocodedBbox) payload.bbox = lastGeocodedBbox;
         
         const response = await fetch("/api/run", { 
           method: "POST", 
@@ -1900,8 +1916,8 @@
         
         runId = body.run_id; 
         sessionStorage.setItem(RUN_KEY, runId); 
-        $("provider").textContent = body.provider || "connected"; 
-        logLine("agent", `Surveying the perfectly cached Demo Area with up to 1000000000 images.`); 
+        $("provider").textContent = "running"; 
+        logLine("agent", `Surveying ${drawnBbox ? "the drawn area" : place} with up to ${maxImages} images.`); 
         setRunControls("running"); 
         connectEvents();
       } catch (error) { 
@@ -1911,21 +1927,23 @@
         showBanner(error.message, true);
       }
     }
-    async function restoreCurrentRun() { const stored = sessionStorage.getItem(RUN_KEY); if (!stored) return; runId = stored; terminal = false; streamCursor = 0; $("provider").textContent = "restoring"; $("rail").innerHTML = `<li class="active"><span class="dot"></span><span class="rail-body"><span class="rail-name">Restoring run…</span><span class="rail-tool">reading authoritative run state</span></span><span class="ms"></span></li>`; setRunControls("running"); try { const result = await hydrateState(); if (!result.known) { finishRun("interrupted", "This run is no longer known by the server, likely because it restarted. Start a new survey.", true); return } if (isActiveStatus(result.status)) connectEvents() } catch (error) { finishRun("interrupted", `Could not restore the saved run: ${error.message}`, true) } }
+    async function restoreCurrentRun() { const urlRun = new URLSearchParams(location.search).get("run"); if (urlRun && /^[a-z0-9]+$/i.test(urlRun)) sessionStorage.setItem(RUN_KEY, urlRun); const stored = sessionStorage.getItem(RUN_KEY); if (!stored) return; runId = stored; terminal = false; streamCursor = 0; $("provider").textContent = "restoring"; $("rail").innerHTML = `<li class="active"><span class="dot"></span><span class="rail-body"><span class="rail-name">Restoring run…</span><span class="rail-tool">reading authoritative run state</span></span><span class="ms"></span></li>`; setRunControls("running"); try { let result = await hydrateState(); if (!result.known) { /* Server restarted: continue from the SQLite checkpoint. */ const r = await fetch(`/api/restore/${encodeURIComponent(runId)}`, { method: "POST" }); if (r.ok) { logLine("restore", `Run ${runId} restored from checkpoint; completed stages are skipped.`); result = await hydrateState() } } if (!result.known) { finishRun("interrupted", "This run is no longer known by the server, likely because it restarted. Start a new survey.", true); return } if (isActiveStatus(result.status)) connectEvents() } catch (error) { finishRun("interrupted", `Could not restore the saved run: ${error.message}`, true) } }
     document.addEventListener("keydown", event => { if (event.key === "Escape") { $("galleryScrim").classList.remove("open"); $("reviewScrim").classList.remove("open"); $("graphScrim").classList.remove("open"); $("configScrim").classList.remove("open") } });
     try { const remembered = localStorage.getItem(PLACE_KEY); if (remembered) { $("place").value = remembered; $("placeClear").hidden = false } } catch (_error) { }
     $("configOpen").onclick = () => openConfig(); $("configClose").onclick = () => $("configScrim").classList.remove("open");
-    const CONFIG_FIELDS = [{ key: "MAPILLARY_TOKEN", label: "Mapillary token", secret: true }, { key: "HF_TOKEN", label: "HuggingFace token (SAM3 access)", secret: true }, { key: "OLLAMA_BASE_URL", label: "Ollama base URL", secret: false }];
+    const CONFIG_FIELDS = [{ key: "LLM_PROFILE", label: "Vision provider (ollama or openai)", secret: false }, { key: "MODEL_VISION", label: "Vision model (e.g. gemma4:31b, gpt-6-luna)", secret: false }, { key: "LLM_REASONING_EFFORT", label: "Reasoning effort, OpenAI only (none, low, medium, high)", secret: false }, { key: "OPENAI_API_KEY", label: "OpenAI API key", secret: true }, { key: "MAPILLARY_TOKEN", label: "Mapillary token", secret: true }, { key: "HF_TOKEN", label: "HuggingFace token (SAM3 access)", secret: true }, { key: "OLLAMA_BASE_URL", label: "Ollama base URL", secret: false }];
     async function openConfig() { $("configScrim").classList.add("open"); $("configStatus").textContent = ""; try { const response = await fetch("/api/config"); const data = await response.json(); $("configBody").innerHTML = CONFIG_FIELDS.map(field => { const info = data[field.key] || {}; const currentValue = field.secret ? "" : (info.value || ""); const setLabel = field.secret && info.set ? ' <span style="color:var(--mint)">✓ set</span>' : ""; return `<div style="margin-bottom:13px"><label class="field-label">${esc(field.label)} <span class="muted">${esc(field.key)}</span>${setLabel}</label><div style="display:flex;gap:7px"><input id="cfg-${esc(field.key)}" placeholder="${field.secret ? "enter new value to update" : "value"}" value="${esc(currentValue)}" ${field.secret ? 'type="password"' : ""}><button class="secondary" style="flex:none;padding:10px" data-reveal="${esc(field.key)}" title="Reveal current value">👁</button></div></div>` }).join(""); document.querySelectorAll("[data-reveal]").forEach(btn => { btn.onclick = async () => { const key = btn.dataset.reveal; const input = document.getElementById("cfg-" + key); if (!input) return; if (input.type === "text" && input.dataset.revealed) { input.type = "password"; input.value = ""; input.placeholder = "enter new value to update"; delete input.dataset.revealed; return } try { const r = await fetch("/api/config/reveal/" + encodeURIComponent(key)); const d = await r.json(); if (d.value) { input.type = "text"; input.value = d.value; input.dataset.revealed = "1" } else { input.type = "text"; input.value = ""; input.placeholder = "(not set)" } } catch (e) { input.placeholder = "reveal failed" } } }) } catch (error) { $("configBody").innerHTML = `<div class="empty">Could not load configuration: ${esc(error.message)}</div>` } }
     $("configSave").onclick = async () => { const payload = {}; CONFIG_FIELDS.forEach(field => { const input = document.getElementById(`cfg-${field.key}`); if (input && input.value.trim()) payload[field.key] = input.value.trim() }); if (!Object.keys(payload).length) { $("configStatus").textContent = "Nothing to save."; return } try { const response = await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`); $("configStatus").textContent = `Saved ${Object.keys(body.applied || {}).length} key(s). Changes apply to new runs.` } catch (error) { $("configStatus").textContent = error.message } };
     // First-launch: open config if no MAPILLARY_TOKEN
     (async () => {
-      sourceData("cached-area", boxFeature({ lng: CACHED_BBOX[0], lat: CACHED_BBOX[1] }, { lng: CACHED_BBOX[2], lat: CACHED_BBOX[3] }).data);
       try {
         const response = await fetch("/api/config"); const data = await response.json();
         if (data.REPLAY_MODE?.value) {
           isOfflineDemo = true;
         }
+        dbEnabled = !!data.DATABASE?.set;
+        // A restored run may have rendered its export before this flag arrived.
+        if (lastCityGml) renderCityGml(lastCityGml);
         if (!data.MAPILLARY_TOKEN?.set && !isOfflineDemo) { openConfig() }
       } catch (_error) { }
     })();
