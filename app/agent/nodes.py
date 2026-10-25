@@ -224,7 +224,7 @@ class Nodes:
                         "pillow.redact_masks",
                         f"{image_id} · {len(human_masks)} person mask(s)",
                     ):
-                        perception.redact_masks(
+                        perception.redact_masks_cached(
                             image["local_path"], human_masks, str(out),
                             blur_radius=self.cfg["privacy_blur_radius"],
                             dilation_px=self.cfg["privacy_dilation_px"],
@@ -260,7 +260,7 @@ class Nodes:
                             "pillow.overlay",
                             f"{image_id} · {len(trash_masks)} trash mask(s)",
                         ):
-                            perception.overlay(str(out), trash_masks, str(overlay_path))
+                            perception.overlay_cached(str(out), trash_masks, str(overlay_path))
                     for item in image_observations:
                         item.image_path = str(out)
                         item.overlay_path = str(overlay_path) if overlay_path else None

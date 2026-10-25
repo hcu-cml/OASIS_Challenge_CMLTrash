@@ -15,6 +15,12 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 MASK_CACHE = Path(os.environ.get("MASK_CACHE", "fixtures/masks"))
+# Composited blobs (redactions, overlays). Lives outside the run directory so a
+# repeat run reuses them instead of redoing the pixel work.
+PIXEL_CACHE = Path(os.environ.get("PIXEL_CACHE", "fixtures/pixels"))
+# Bump when redact_masks or overlay changes how pixels are produced, so blobs
+# rendered by an older pipeline are not served.
+PIXEL_PIPELINE_VERSION = "1"
 GATE_CONFIDENCE = float(os.environ.get("GATE_CONFIDENCE", "0.60"))
 
 
@@ -64,6 +70,54 @@ def _cache_key(
         key.update({"namespace": namespace, "category": category})
     digest = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:20]
     return MASK_CACHE / f"{digest}.json"
+
+
+def _array_digest(arrays: list[np.ndarray]) -> str:
+    """
+    Order-independent digest of a mask set.
+
+    Both consumers composite the masks as a set, so the same masks in a
+    different order must still address the same blob.
+    """
+    per_mask = sorted(
+        hashlib.sha256(
+            str(array.shape).encode()
+            + array.dtype.str.encode()
+            + np.ascontiguousarray(array).tobytes()
+        ).hexdigest()
+        for array in arrays
+    )
+    return hashlib.sha256("".join(per_mask).encode()).hexdigest()[:20]
+
+
+def _file_digest(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:20]
+
+
+def _pixel_cache_path(
+    kind: str, image_path: str, masks: list[np.ndarray], params: dict[str, Any]
+) -> Path:
+    """
+    Content-addressed key over both inputs.
+
+    The source image is hashed rather than keyed by image_id, so a run whose
+    pixels differ cannot be served a blob rendered from other pixels.
+    """
+    blob = json.dumps(
+        {
+            "v": PIXEL_PIPELINE_VERSION,
+            "kind": kind,
+            "image": _file_digest(image_path),
+            "masks": _array_digest(masks),
+            "params": params,
+        },
+        sort_keys=True,
+    )
+    return PIXEL_CACHE / f"{hashlib.sha256(blob.encode()).hexdigest()[:20]}.jpg"
 
 
 class Segmenter:
@@ -344,4 +398,63 @@ def redact_masks(
     selection = selection.filter(ImageFilter.MaxFilter(size=size))
     blurred = original.filter(ImageFilter.GaussianBlur(radius=blur_radius))
     Image.composite(blurred, original, selection).save(out_path, quality=88)
+    return out_path
+
+
+def _publish(cached: Path, out_path: str) -> str:
+    """
+    Materialise a cached blob at the caller's per-run path.
+
+    The run directory is what the rest of the pipeline publishes from, so a
+    cache hit still has to leave a real file there.
+    """
+    from .sources import _link_or_copy
+
+    _link_or_copy(cached, Path(out_path))
+    return out_path
+
+
+def redact_masks_cached(
+    image_path: str,
+    masks: list[np.ndarray],
+    out_path: str,
+    blur_radius: float = 28.0,
+    dilation_px: int = 25,
+) -> str:
+    """
+    redact_masks behind a content-addressed cache.
+
+    The blurred composite only depends on the source pixels, the mask set and
+    the blur parameters, so a repeat run over the same imagery reuses the blob
+    rather than paying for the full-frame blur and dilation again.
+    """
+    if not masks:
+        return redact_masks(image_path, masks, out_path, blur_radius, dilation_px)
+
+    from .sources import _link_or_copy
+
+    cached = _pixel_cache_path(
+        "redact", image_path, masks, {"blur": blur_radius, "dilate": dilation_px}
+    )
+    if cached.exists():
+        return _publish(cached, out_path)
+
+    redact_masks(image_path, masks, out_path, blur_radius, dilation_px)
+    _link_or_copy(Path(out_path), cached)
+    return out_path
+
+
+def overlay_cached(image_path: str, masks: list[np.ndarray], out_path: str) -> str:
+    """overlay behind the same content-addressed cache as redact_masks_cached."""
+    if not masks:
+        return overlay(image_path, masks, out_path)
+
+    from .sources import _link_or_copy
+
+    cached = _pixel_cache_path("overlay", image_path, masks, {})
+    if cached.exists():
+        return _publish(cached, out_path)
+
+    overlay(image_path, masks, out_path)
+    _link_or_copy(Path(out_path), cached)
     return out_path

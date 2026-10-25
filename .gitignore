@@ -36,6 +36,7 @@ fixtures/cache/
 fixtures/llm/
 fixtures/masks/
 fixtures/images/
+fixtures/pixels/
 record_demo.py
 
 # development and maintenance scripts
