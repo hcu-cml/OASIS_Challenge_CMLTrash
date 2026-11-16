@@ -39,7 +39,8 @@ services:
     ports:
       # Published on 5050 in case 5000 is taken by a native run of this app.
       # The container always listens on 5000.
-      - "5050:5000"
+      # Localhost only: the app has no authentication.
+      - "127.0.0.1:5050:5000"
     # SAM3 runs on CUDA when available and falls back to CPU, which is too slow
     # for a full survey. The GPU reservation is required for live runs.
     deploy:

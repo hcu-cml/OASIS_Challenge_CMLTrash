@@ -17,6 +17,28 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
+# Hostnames this server answers to. Rejecting others blocks DNS rebinding.
+# Add LAN names/IPs via ALLOWED_HOSTS=host1,host2 if you really expose it.
+_ALLOWED_HOSTS = {"localhost", "127.0.0.1", "[::1]"} | {
+    h.strip().lower() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
+}
+
+
+@app.before_request
+def _block_cross_site():
+    """No auth here, so stop other websites from driving the API (CSRF / rebinding)."""
+    host = (request.host or "").lower()
+    host = host.split("]")[0] + "]" if host.startswith("[") else host.split(":")[0]
+    if host not in _ALLOWED_HOSTS:
+        return jsonify({"error": "host not allowed"}), 403
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("Origin")
+        if origin and origin.split("://", 1)[-1].lower() != (request.host or "").lower():
+            return jsonify({"error": "cross-origin request blocked"}), 403
+        # JSON content type forces a CORS preflight, which this server never approves.
+        if request.content_length and not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 415
+
 
 @app.get("/")
 def index():
@@ -108,7 +130,7 @@ def get_config():
     secret_keys = {"MAPILLARY_TOKEN", "HF_TOKEN", "OPENAI_API_KEY"}
     for key, value in keys.items():
         if key in secret_keys:
-            masked[key] = {"set": bool(value), "preview": value[:6] + "…" if len(value) > 6 else ""}
+            masked[key] = {"set": bool(value)}
         else:
             masked[key] = {"set": bool(value), "value": value}
             
@@ -118,17 +140,6 @@ def get_config():
     masked["DATABASE"] = {"set": db.enabled()}
     
     return jsonify(masked)
-
-
-@app.get("/api/config/reveal/<key>")
-def reveal_config(key: str):
-    """Return the full value of a config key. Local-only server, no auth needed."""
-    import os as _os
-
-    allowed = CONFIG_KEYS | {"SAM3_DIR"}
-    if key not in allowed:
-        return jsonify({"error": "unknown key"}), 404
-    return jsonify({"key": key, "value": _os.environ.get(key, "")})
 
 
 CONFIG_KEYS = {
